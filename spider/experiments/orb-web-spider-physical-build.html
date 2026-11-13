@@ -1,0 +1,124 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Orb Weaver — Physical Web Construction</title>
+<style>
+:root{color-scheme:dark;--bg:#070a0f;--panel:rgba(12,17,24,.86);--line:rgba(213,231,243,.16);--text:#dbe5ee;--muted:#91a0af}
+*{box-sizing:border-box}html,body{margin:0;width:100%;height:100%;overflow:hidden;background:var(--bg);color:var(--text);font-family:Inter,ui-sans-serif,system-ui,-apple-system,"Segoe UI",sans-serif}
+canvas{display:block;width:100vw;height:100vh}
+.hud{position:fixed;left:18px;top:16px;z-index:2;width:min(370px,calc(100vw - 36px));padding:13px 15px;border:1px solid var(--line);border-radius:12px;background:var(--panel);backdrop-filter:blur(12px);box-shadow:0 12px 42px #0005;pointer-events:none}
+.eyebrow{font:600 9px/1.5 ui-monospace,monospace;letter-spacing:.18em;text-transform:uppercase;color:#9fb5c8}h1{font-size:15px;line-height:1.3;margin:4px 0 5px;font-weight:650}#stage{font:11px/1.5 ui-monospace,monospace;color:#d3e0eb}#detail{font-size:11px;line-height:1.45;color:var(--muted);margin-top:3px}.progress{height:2px;background:#26313c;margin-top:10px;border-radius:3px;overflow:hidden}.progress>i{display:block;width:0;height:100%;background:#d4e3ed;box-shadow:0 0 8px #d4e3ed;transition:width .1s linear}
+.actions{position:fixed;right:18px;top:16px;display:flex;gap:7px;z-index:2}button{border:1px solid var(--line);border-radius:8px;background:var(--panel);color:#e1ebf3;padding:8px 11px;font-size:11px;cursor:pointer;backdrop-filter:blur(10px)}button:hover{background:#24303d;border-color:#9cb2c5}.hint{position:fixed;left:18px;bottom:16px;z-index:2;padding:7px 10px;border:1px solid #ffffff14;border-radius:8px;background:#0c1118b8;color:#8e9ba8;font:10px ui-monospace,monospace;pointer-events:none}.legend{position:fixed;right:18px;bottom:16px;z-index:2;padding:8px 10px;border:1px solid #ffffff14;border-radius:8px;background:#0c1118b8;color:#95a3b0;font:10px ui-monospace,monospace;display:flex;gap:12px;pointer-events:none}.swatch{display:inline-block;width:18px;height:2px;vertical-align:middle;margin-right:5px;background:#d8e7f0}.swatch.sticky{background:#e4d9bb;box-shadow:0 0 5px #e4d9bb}
+@media(max-width:600px){.hud{left:9px;top:9px}.actions{right:9px;top:auto;bottom:54px}.hint{left:9px;bottom:10px}.legend{right:9px;bottom:10px}}
+</style>
+</head>
+<body>
+<canvas id="scene" aria-label="An animated spider physically constructing an orb web anchored to the screen edges"></canvas>
+<section class="hud" aria-live="polite"><div class="eyebrow">Silk engineering · sequential construction</div><h1>Orb-weaver — building the web</h1><div id="stage">Preparing first anchor…</div><div id="detail">The spider begins at one point on the screen frame.</div><div class="progress"><i id="bar"></i></div></section>
+<div class="actions"><button id="restart">↻ Restart build</button><button id="pause">Ⅱ Pause</button></div>
+<div class="hint">SCREEN EDGES = ANCHOR WALLS · WATCH THE SILK FOLLOW THE SPIDER</div>
+<div class="legend"><span><i class="swatch"></i>Structural silk</span><span><i class="swatch sticky"></i>Capture silk</span></div>
+<script>
+(()=>{'use strict';
+const canvas=document.getElementById('scene'),ctx=canvas.getContext('2d');
+const stageEl=document.getElementById('stage'),detailEl=document.getElementById('detail'),bar=document.getElementById('bar');
+const restartBtn=document.getElementById('restart'),pauseBtn=document.getElementById('pause');
+let W=0,H=0,DPR=1,geo=null,actions=[],strands=[],knots=[],active=null,actionIndex=0,elapsedBuild=0,paused=false,finished=false,lastFrame=0,windTime=0,rafId=0,spider={x:0,y:0,angle:0,bob:0,slip:0,tension:0};
+const COLORS={struct:'rgba(220,235,245,.74)',scaffold:'rgba(169,202,224,.53)',capture:'rgba(238,226,195,.91)'};
+const clamp=(v,a=0,b=1)=>Math.max(a,Math.min(b,v));
+const lerp=(a,b,t)=>a+(b-a)*t;
+const P=(x,y)=>({x,y});
+const dist=(a,b)=>Math.hypot(b.x-a.x,b.y-a.y);
+const mix=(a,b,t)=>P(lerp(a.x,b.x,t),lerp(a.y,b.y,t));
+function lengthOf(points){let n=0;for(let i=1;i<points.length;i++)n+=dist(points[i-1],points[i]);return n;}
+function pathSampler(points){const acc=[0];for(let i=1;i<points.length;i++)acc.push(acc[i-1]+dist(points[i-1],points[i]));const total=acc[acc.length-1]||1;return {points,acc,total,at(d){d=clamp(d,0,total);let i=1;while(i<acc.length-1&&acc[i]<d)i++;const span=acc[i]-acc[i-1]||1,t=(d-acc[i-1])/span;const pos=mix(points[i-1],points[i],t);const a=points[i-1],b=points[i];const l=dist(a,b)||1;return {pos,angle:Math.atan2(b.y-a.y,b.x-a.x),index:i};},prefix(d){d=clamp(d,0,total);const out=[points[0]];for(let i=1;i<acc.length;i++){if(acc[i]<d)out.push(points[i]);else{if(d>acc[i-1]+.01)out.push(this.at(d).pos);break;}}return out;}};}
+function framePoint(t,g=geo){const l=g.left,r=g.right,top=g.top,b=g.bottom,tw=r-l,th=b-top,per=2*(tw+th);let d=((t%1)+1)%1*per;if(d<=tw)return P(l+d,top);d-=tw;if(d<=th)return P(r,top+d);d-=th;if(d<=tw)return P(r-d,b);d-=tw;return P(l,b-d);}
+function makeGeometry(){const left=3,right=W-3,top=3,bottom=H-3;const per=2*((right-left)+(bottom-top));const n=32;const g={left,right,top,bottom,n,per};g.anchors=[];for(let i=0;i<n;i++)g.anchors.push(framePoint(i/n,g));const topRight=Math.round(n*(right-left)/per);const bottomMid=Math.round(n*((right-left)+(bottom-top)+(right-left)*.5)/per)%n;g.topRight=topRight;g.bottomMid=bottomMid;g.hub=P(W*.50,H*.51);return g;}
+function shortestRing(from,to){const n=geo.n;let cw=(to-from+n)%n,ccw=(from-to+n)%n;const dir=cw<=ccw?1:-1;const steps=Math.min(cw,ccw);const pts=[geo.anchors[from]];let i=from;for(let k=0;k<steps;k++){i=(i+dir+n)%n;pts.push(geo.anchors[i]);}return pts;}
+function concatPaths(...paths){const out=[];for(const path of paths){for(let i=0;i<path.length;i++){if(out.length&&i===0&&dist(out[out.length-1],path[i])<.1)continue;out.push(path[i]);}}return out;}
+function addAction(kind,points,stage,label,type='struct',speed=235,opts={}){const sampler=pathSampler(points);actions.push({kind,points,sampler,length:sampler.total,stage,label,type,speed,progress:0,slipUsed:false,slipTimer:0,opts});}
+function addPause(stage,label,duration=.24){actions.push({kind:'pause',points:[],stage,label,duration,progress:0});}
+function addTension(stage,label,duration=.46){actions.push({kind:'tension',points:[],stage,label,duration,progress:0});}
+function travel(points,stage,label,speed=270){if(points.length>1&&lengthOf(points)>2)addAction('travel',points,stage,label,'struct',speed);}
+function lay(points,stage,label,type='struct',speed=210,doTension=true){addAction('lay',points,stage,label,type,speed,{wind:type==='struct'&&stage===0});if(doTension)addTension(stage,'Testing silk tension',.42);}
+function buildActions(){actions=[];const A=geo.anchors,hub=geo.hub,tl=0,tr=geo.topRight,bm=geo.bottomMid;const bridgeMid=mix(A[tl],A[tr],.5);
+// STAGE 1 — one anchor at the physical left/top frame, then a single bridge to the opposite top edge.
+lay([A[tl],A[tr]],0,'The first bridge line is anchored to the top frame','struct',205,true);knots.push(A[tl]);
+// STAGE 2 — spider returns along the bridge, descends to the hub, then builds the Y support arms.
+travel([A[tr],bridgeMid],1,'Walking back along the bridge to its midpoint');lay([bridgeMid,hub],1,'Dropping a central support thread','struct',185,true);knots.push(hub);
+travel([hub,bridgeMid,A[tl]],1,'Climbing the new support and crossing the bridge');lay([A[tl],hub],1,'Fastening the left arm of the Y','struct',185,true);
+travel([hub,bridgeMid,A[tr]],1,'Crossing the bridge to the opposite anchor');lay([A[tr],hub],1,'Fastening the right arm of the Y','struct',185,true);
+lay([hub,A[bm]],1,'Dropping the lower Y support to the bottom frame','struct',185,true);
+// STAGE 3 — perimeter strands are laid one at a time while the spider follows the screen frame.
+travel([hub,A[bm]],2,'Climbing down to the lower frame');
+let i=bm;while(i!==tl){const next=(i+1)%geo.n;if(next===tr){travel([A[i],A[next]],2,'Walking along the already anchored top bridge');i=next;continue;}lay([A[i],A[next]],2,'Laying and fastening a perimeter frame section','struct',245,true);knots.push(A[next]);i=next;}
+// Close the opposite side from the top-right, continuing around the edge to the lower anchor.
+if(i===tl){travel([A[tl],A[tr]],2,'Crossing the original bridge to the right frame');i=tr;}
+while(i!==bm){const next=(i+1)%geo.n;lay([A[i],A[next]],2,'Tensioning the outer frame against the screen edge','struct',245,true);knots.push(A[next]);i=next;}
+// STAGE 4 — 32 radii, approached by walking the completed perimeter from an existing radial anchor.
+const seeds=[tl,tr,bm];
+for(let target=0;target<geo.n;target++){
+ if(seeds.includes(target))continue;
+ let seed=seeds[0],best=Infinity;for(const s of seeds){const dRing=Math.min((target-s+geo.n)%geo.n,(s-target+geo.n)%geo.n);const d=dist(hub,A[s])+dRing*geo.per/geo.n;if(d<best){best=d;seed=s;}}
+ const route=shortestRing(seed,target);travel(concatPaths([hub,A[seed]],route),3,'Walking existing silk to the next spoke anchor',275);
+ lay([A[target],hub],3,'Drawing a new radial spoke back to the hub','struct',215,true);
+}
+// STAGE 5 — the auxiliary spiral is physically laid outward from the hub.
+const spiral=makeSpiral(hub,A[tl],5.4,620);lay(spiral,4,'Laying the temporary spiral scaffold outward','scaffold',220,true);
+// STAGE 6 — reverse along the scaffold, replacing it with elastic capture silk.
+addPause(5,'Turning at the outer anchor to reverse direction',.42);
+lay([...spiral].reverse(),5,'Laying sticky capture silk inward and recycling the scaffold','capture',235,false);
+// STAGE 7 — finish the free zone at the hub.
+addTension(6,'Pulling the final hub threads tight',.8);addPause(6,'Testing the finished web',.6);
+}
+function makeSpiral(hub,end,turns,count){const dx=end.x-hub.x,dy=end.y-hub.y,finalA=Math.atan2(dy,dx),startA=finalA-turns*Math.PI*2;const rx=Math.abs(dx),ry=Math.abs(dy),pts=[];for(let i=0;i<=count;i++){const t=i/count;const r=.035+.965*t;const a=startA+t*turns*Math.PI*2;const x=hub.x+Math.cos(a)*rx*r;const y=hub.y+Math.sin(a)*ry*r;pts.push(P(x,y));}pts[0]=P(hub.x,hub.y);pts[pts.length-1]=P(end.x,end.y);return pts;}
+function startBuild(){if(rafId)cancelAnimationFrame(rafId);geo=makeGeometry();strands=[];knots=[];buildActions();actionIndex=0;active=null;finished=false;paused=false;lastFrame=performance.now();windTime=0;spider.x=geo.anchors[0].x;spider.y=geo.anchors[0].y;spider.angle=0;spider.bob=0;spider.slip=0;spider.tension=0;pauseBtn.textContent='Ⅱ Pause';activateAction();render();lastFrame=performance.now();rafId=requestAnimationFrame(frame);}
+function activateAction(){if(actionIndex>=actions.length){finished=true;active=null;return;}active=actions[actionIndex];active.progress=0;active.slipUsed=false;active.slipTimer=0;if(active.kind==='lay')active.sampler=pathSampler(active.points);if(active.kind==='tension')active.targetStrand=strands.length?strands[strands.length-1]:null;}
+function finishAction(){if(active&&active.kind==='lay'){if(active.type==='capture'){strands=strands.filter(s=>s.type!=='scaffold');}strands.push({points:active.points.slice(),type:active.type,complete:true,tension:1,stage:active.stage});const end=active.points[active.points.length-1];knots.push(end);}actionIndex++;activateAction();}
+function getSpiderPosition(){if(!active)return {pos:P(spider.x,spider.y),angle:spider.angle};if(active.kind==='pause'||active.kind==='tension')return {pos:P(spider.x,spider.y),angle:spider.angle};const d=active.progress*active.length;const s=active.sampler.at(d);let pos=s.pos;if(active.slipTimer>0){const v=active.opts?.slipVec||P(-Math.cos(s.angle)*3, -Math.sin(s.angle)*3);pos=P(pos.x+v.x,pos.y+v.y);}return {pos,angle:s.angle};}
+function update(dt){windTime+=dt;if(finished||paused||!active)return;
+ if(active.kind==='pause'){active.progress+=dt/active.duration;if(active.progress>=1)finishAction();return;}
+ if(active.kind==='tension'){active.progress+=dt/active.duration;spider.tension=1-active.progress;if(active.progress>=1){spider.tension=0;finishAction();}return;}
+ if(active.slipTimer>0){active.slipTimer-=dt;spider.slip=Math.max(0,active.slipTimer/.24);return;}else{spider.slip=0;}
+ const pxPerSec=active.speed;active.progress=clamp((active.progress*active.length+pxPerSec*dt)/active.length);if(active.kind==='lay'&&!active.slipUsed&&active.length>140&&(actionIndex%7===3)&&active.progress>.43){active.slipUsed=true;active.slipTimer=.24;active.opts.slipVec=P(-Math.cos(active.sampler.at(active.progress*active.length).angle)*4, -Math.sin(active.sampler.at(active.progress*active.length).angle)*4);spider.slip=1;return;}
+ if(active.progress>=1)finishAction();
+}
+function background(){ctx.fillStyle='#070a0f';ctx.fillRect(0,0,W,H);const g=ctx.createRadialGradient(W*.5,H*.48,Math.min(W,H)*.04,W*.5,H*.48,Math.max(W,H)*.78);g.addColorStop(0,'rgba(24,34,45,.42)');g.addColorStop(1,'rgba(3,6,10,.12)');ctx.fillStyle=g;ctx.fillRect(0,0,W,H);
+ ctx.save();ctx.strokeStyle='rgba(150,178,200,.035)';ctx.lineWidth=.7;ctx.beginPath();for(let x=0;x<W;x+=52){ctx.moveTo(x,0);ctx.lineTo(x,H);}for(let y=0;y<H;y+=52){ctx.moveTo(0,y);ctx.lineTo(W,y);}ctx.stroke();ctx.restore();
+ // Physical screen frame: a faint edge and small anchor ticks.
+ ctx.save();ctx.strokeStyle='rgba(180,205,222,.11)';ctx.lineWidth=.7;ctx.strokeRect(1,1,W-2,H-2);ctx.restore();}
+function drawPolyline(points,color,width,alpha=1,glow=0){if(points.length<2)return;ctx.save();ctx.globalAlpha=alpha;ctx.strokeStyle=color;ctx.lineWidth=width;ctx.lineCap='round';ctx.lineJoin='round';if(glow){ctx.shadowColor=color;ctx.shadowBlur=glow;}ctx.beginPath();ctx.moveTo(points[0].x,points[0].y);for(let i=1;i<points.length;i++)ctx.lineTo(points[i].x,points[i].y);ctx.stroke();ctx.restore();}
+function perturb(points,amount,phase){if(amount<=0)return points;const total=pathSampler(points).total;let acc=0;const out=points.map((p,i)=>{if(i===0||i===points.length-1){acc+=i?dist(points[i-1],p):0;return p;}acc+=dist(points[i-1],p);const a=points[i-1],b=points[i+1],dx=b.x-a.x,dy=b.y-a.y,l=Math.hypot(dx,dy)||1;const wave=Math.sin(phase*2.7+acc*.018)*amount;return P(p.x-dy/l*wave,p.y+dx/l*wave);});return out;}
+function drawStrand(strand,slack=0){const type=strand.type;const color=COLORS[type]||COLORS.struct;let width=type==='capture'?.72:type==='scaffold'?.48:.62;const visualPoints=slack>0?perturb(strand.points,slack,windTime*.7):strand.points;drawPolyline(visualPoints,color,width,1,type==='capture'?1.4:.35);
+ if(type==='capture'){const sampler=pathSampler(visualPoints);for(let d=12;d<sampler.total;d+=18){const p=sampler.at(d).pos;ctx.fillStyle='rgba(255,247,220,.78)';ctx.shadowColor='rgba(255,237,192,.7)';ctx.shadowBlur=2;ctx.beginPath();ctx.arc(p.x,p.y,.48+(Math.sin(d)*.12),0,Math.PI*2);ctx.fill();}ctx.shadowBlur=0;}}
+function drawActiveStrand(){if(!active||active.kind!=='lay')return;const lag=15;let d=active.progress*active.length-lag;if(d<=0)return;let pts=active.sampler.prefix(d);if(active.type==='struct'&&active.opts.wind&&active.progress<.85)pts=perturb(pts,(1-active.progress/.85)*5,windTime);else if(active.type==='scaffold')pts=perturb(pts,Math.sin(windTime*1.2)*.75,windTime);drawPolyline(pts,COLORS[active.type],active.type==='capture'?.75:.62,1,active.type==='capture'?1.3:.4);
+ if(active.type==='capture'){const sampler=pathSampler(pts);for(let d2=9;d2<sampler.total;d2+=20){const p=sampler.at(d2).pos;ctx.fillStyle='rgba(255,245,215,.78)';ctx.beginPath();ctx.arc(p.x,p.y,.5,0,Math.PI*2);ctx.fill();}}
+}
+function drawKnots(){ctx.save();for(const p of knots){ctx.fillStyle='rgba(226,238,246,.7)';ctx.shadowColor='rgba(208,231,245,.45)';ctx.shadowBlur=3;ctx.beginPath();ctx.arc(p.x,p.y,1.45,0,Math.PI*2);ctx.fill();ctx.strokeStyle='rgba(220,235,245,.32)';ctx.lineWidth=.45;ctx.beginPath();ctx.arc(p.x,p.y,3,0,Math.PI*2);ctx.stroke();}ctx.restore();}
+function drawSpider(dt){const loc=getSpiderPosition();const target=loc.pos;const blend=1-Math.exp(-Math.min(dt,.05)*18);spider.x=lerp(spider.x,target.x,blend);spider.y=lerp(spider.y,target.y,blend);spider.angle=loc.angle;const speed=active&&(active.kind==='travel'||active.kind==='lay')?active.speed:0;const gait=windTime*(speed>0?Math.min(13,speed*.055):1.6);const bodyBob=Math.sin(gait*2)*(.9+speed*.004)+(spider.slip*1.5);const fx=Math.cos(spider.angle),fy=Math.sin(spider.angle),sx=-fy,sy=fx;const bx=spider.x,by=spider.y+bodyBob;
+ const local=(x,y)=>P(bx+fx*x+sx*y,by+fy*x+sy*y);
+ // Eight legs, staggered like a walking spider; stance and swing are visible even at slow crawl.
+ const bases=[6,3,-1,-5];for(let row=0;row<4;row++){for(let side of [-1,1]){const phase=gait+((row+((side===1)?1:0))%2)*Math.PI;const cyc=(phase%(Math.PI*2)+Math.PI*2)%(Math.PI*2);const swing=Math.max(0,Math.sin(cyc));const step=Math.cos(cyc)*2.3;const base=local(bases[row],side*4.2);const reach=[13,10,-5,-13][row];const spread=[13,17,19,17][row];let foot=local(reach+step,side*(spread+Math.abs(swing)*2));foot.y-=swing*3.2;
+ const knee=local(bases[row]+reach*.48+step*.45,side*(spread*.72)+side*5);knee.y-=swing*1.5;
+ ctx.strokeStyle=side<0?'rgba(190,164,118,.95)':'rgba(211,185,137,.95)';ctx.lineWidth=row===0?1.55:1.35;ctx.lineCap='round';ctx.beginPath();ctx.moveTo(base.x,base.y);ctx.lineTo(knee.x,knee.y);ctx.lineTo(foot.x,foot.y);ctx.stroke();ctx.fillStyle='#6b5138';ctx.beginPath();ctx.arc(knee.x,knee.y,.9,0,Math.PI*2);ctx.fill();ctx.beginPath();ctx.arc(foot.x,foot.y,.65,0,Math.PI*2);ctx.fill();}}
+ // Spinnerets trail a newly laid silk line from the rear of the abdomen.
+ const abdomen=local(-10,0),thorax=local(1,0),spinneret=local(-17,0);
+ ctx.save();ctx.translate(abdomen.x,abdomen.y);ctx.rotate(spider.angle);ctx.fillStyle='#6a4428';ctx.strokeStyle='rgba(231,196,139,.85)';ctx.lineWidth=.7;ctx.beginPath();ctx.ellipse(0,0,7.2,4.6,0,0,Math.PI*2);ctx.fill();ctx.stroke();ctx.fillStyle='rgba(235,194,126,.7)';for(let i=0;i<5;i++){ctx.beginPath();ctx.arc(-3+(i%2)*2,(i-2)*1.25,.42,0,Math.PI*2);ctx.fill();}ctx.restore();
+ ctx.save();ctx.translate(thorax.x,thorax.y);ctx.rotate(spider.angle);ctx.fillStyle='#9a7951';ctx.strokeStyle='rgba(235,214,178,.9)';ctx.lineWidth=.75;ctx.beginPath();ctx.ellipse(0,0,4.8,3.6,0,0,Math.PI*2);ctx.fill();ctx.stroke();ctx.fillStyle='#171516';for(let i=0;i<4;i++){ctx.beginPath();ctx.arc(3.2,(i-1.5)*1.25,.55,0,Math.PI*2);ctx.fill();}ctx.restore();
+ // Pedipalps and spinnerets.
+ ctx.strokeStyle='#d6b98a';ctx.lineWidth=.75;ctx.beginPath();const head=local(5,0);ctx.moveTo(head.x,head.y);const palp1=local(8,-3),palp2=local(8,3);ctx.lineTo(palp1.x,palp1.y);ctx.moveTo(head.x,head.y);ctx.lineTo(palp2.x,palp2.y);ctx.stroke();ctx.fillStyle='#d8c19b';ctx.beginPath();ctx.arc(spinneret.x,spinneret.y,.9,0,Math.PI*2);ctx.fill();
+ // During a tension test the hind legs briefly pull backward, making the strand visibly tighten.
+ if(active&&active.kind==='tension'){ctx.save();ctx.strokeStyle='rgba(240,220,180,.95)';ctx.lineWidth=1.6;for(let side of [-1,1]){const b=local(-5,side*4),k=local(-14,side*11),f=local(-20,side*13);ctx.beginPath();ctx.moveTo(b.x,b.y);ctx.lineTo(k.x,k.y);ctx.lineTo(f.x,f.y);ctx.stroke();}ctx.restore();}
+}
+function updateUI(){if(finished){stageEl.textContent='Construction complete · 7 stages';detailEl.textContent='The spider has anchored the perimeter, built the radii, replaced the scaffold with capture silk, and finished the hub.';bar.style.width='100%';return;}const stage=active?active.stage:0;const names=['01 · Bridge line','02 · Y-shaped foundation','03 · Perimeter frame','04 · Radial spokes','05 · Auxiliary scaffold spiral','06 · Sticky capture spiral','07 · Finished hub'];const details=['One anchor is fixed to the screen edge; the spider crawls across to secure the far end.','The spider walks the bridge, drops to the hub, and fastens the three supporting arms.','Each perimeter section is carried and tensioned against the screen frame, one connection at a time.','The spider returns along completed silk and lays each spoke individually from the rim to the hub.','A temporary non-sticky guide spiral is laid outward, with the spider walking along the path it creates.','The spider reverses direction, laying elastic capture silk inward and removing the temporary scaffold behind it.','The spider tests the final threads and reinforces the central free-zone.'];stageEl.textContent=names[stage]+' · '+(active?Math.round(active.progress*100)+'%':'');detailEl.textContent=active?.label||details[stage];bar.style.width=((actionIndex+(active?active.progress:0))/actions.length*100)+'%';}
+function render(dt=0){background();for(const s of strands){if(active&&active.kind==='lay'&&active.type==='capture'&&s.type==='scaffold')continue;const slack=active&&active.kind==='tension'&&active.targetStrand===s?3.4*(1-active.progress):0;drawStrand(s,slack);}if(active&&active.kind==='lay'&&active.type==='capture'){const p=active.progress;const aux=actions.find(a=>a.kind==='lay'&&a.type==='scaffold');if(aux){const remain=1-p;const count=Math.max(2,Math.floor(remain*(aux.points.length-1))+1);drawPolyline(aux.points.slice(0,count),COLORS.scaffold,.48,Math.max(.025,remain),.25);}}drawActiveStrand();drawKnots();drawSpider(dt);updateUI();}
+function frame(now){if(paused)return;const dt=Math.min(.04,Math.max(0,(now-lastFrame)/1000));lastFrame=now;update(dt);render(dt);if(!finished)rafId=requestAnimationFrame(frame);}
+function resize(){DPR=Math.min(window.devicePixelRatio||1,2);W=innerWidth;H=innerHeight;canvas.width=Math.round(W*DPR);canvas.height=Math.round(H*DPR);ctx.setTransform(DPR,0,0,DPR,0,0);startBuild();}
+restartBtn.addEventListener('click',startBuild);pauseBtn.addEventListener('click',()=>{paused=!paused;pauseBtn.textContent=paused?'▶ Resume':'Ⅱ Pause';if(paused&&rafId)cancelAnimationFrame(rafId);if(!paused){lastFrame=performance.now();rafId=requestAnimationFrame(frame);}});window.addEventListener('resize',resize,{passive:true});
+resize();
+})();
+</script>
+</body>
+</html>

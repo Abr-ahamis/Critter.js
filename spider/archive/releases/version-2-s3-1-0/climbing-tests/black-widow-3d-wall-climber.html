@@ -1,0 +1,799 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="theme-color" content="#08090c" />
+  <title>Black Widow — 3D Wall Crawler</title>
+  <style>
+    :root { color-scheme: dark; }
+    * { box-sizing: border-box; }
+    html, body { width: 100%; height: 100%; margin: 0; overflow: hidden; background: #08090c; }
+    body { user-select: none; -webkit-user-select: none; }
+    #view { position: fixed; inset: 0; width: 100%; height: 100%; display: block; outline: none; touch-action: none; }
+    #load-error { position: fixed; inset: 0; display: none; place-items: center; padding: 24px; color: #d5d7df; background: #08090c; font: 14px/1.6 system-ui, sans-serif; text-align: center; }
+    #load-error.visible { display: grid; }
+  </style>
+</head>
+<body>
+  <canvas id="view" aria-label="Interactive 3D black widow spider climbing a wall"></canvas>
+  <div id="load-error">The 3D engine could not be loaded. Check your internet connection and reopen this file in Brave or Chrome.</div>
+
+  <script type="module">
+    import * as THREE from 'https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js';
+
+    // -----------------------------------------------------------------------
+    // Scene and camera: intentionally wide, distant framing so the spider
+    // remains small in the environment, as in the original crawler.
+    // -----------------------------------------------------------------------
+    const canvas = document.getElementById('view');
+    const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, alpha: false, powerPreference: 'high-performance' });
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 1.8));
+    renderer.setSize(window.innerWidth, window.innerHeight, false);
+    renderer.shadowMap.enabled = true;
+    renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+    renderer.outputColorSpace = THREE.SRGBColorSpace;
+    renderer.toneMapping = THREE.ACESFilmicToneMapping;
+    renderer.toneMappingExposure = 1.15;
+
+    const scene = new THREE.Scene();
+    scene.background = new THREE.Color(0x08090c);
+    scene.fog = new THREE.Fog(0x08090c, 46, 105);
+
+    const camera = new THREE.PerspectiveCamera(42, window.innerWidth / window.innerHeight, 0.1, 180);
+    const cameraTarget = new THREE.Vector3(0, 2.4, -1.8);
+    let cameraDistance = 54;
+    let cameraAzimuth = 0;
+    let cameraElevation = 0.48;
+    const minCameraDistance = 30;
+    const maxCameraDistance = 82;
+
+    function updateCamera() {
+      const horizontal = Math.cos(cameraElevation) * cameraDistance;
+      camera.position.set(
+        cameraTarget.x + Math.sin(cameraAzimuth) * horizontal,
+        cameraTarget.y + Math.sin(cameraElevation) * cameraDistance,
+        cameraTarget.z + Math.cos(cameraAzimuth) * horizontal
+      );
+      camera.lookAt(cameraTarget);
+    }
+    updateCamera();
+
+    // -----------------------------------------------------------------------
+    // Lighting and original dark, reactive grid-floor atmosphere.
+    // -----------------------------------------------------------------------
+    scene.add(new THREE.HemisphereLight(0xb9c4d8, 0x111116, 1.05));
+    const keyLight = new THREE.DirectionalLight(0xe2e6f2, 2.1);
+    keyLight.position.set(-13, 24, 18);
+    keyLight.castShadow = true;
+    keyLight.shadow.mapSize.set(2048, 2048);
+    keyLight.shadow.camera.left = -30;
+    keyLight.shadow.camera.right = 30;
+    keyLight.shadow.camera.top = 25;
+    keyLight.shadow.camera.bottom = -25;
+    keyLight.shadow.bias = -0.00025;
+    scene.add(keyLight);
+    const rimLight = new THREE.PointLight(0x8d263c, 18, 24, 2);
+    rimLight.position.set(7, 9, 9);
+    scene.add(rimLight);
+
+    const floor = new THREE.Mesh(
+      new THREE.PlaneGeometry(120, 120),
+      new THREE.MeshStandardMaterial({ color: 0x090a0e, roughness: 0.96, metalness: 0.02 })
+    );
+    floor.rotation.x = -Math.PI / 2;
+    floor.position.y = -0.04;
+    floor.receiveShadow = true;
+    scene.add(floor);
+
+    const floorGrid = new THREE.GridHelper(120, 60, 0x343640, 0x22242c);
+    floorGrid.position.y = 0.006;
+    floorGrid.material.transparent = true;
+    floorGrid.material.opacity = 0.30;
+    floorGrid.material.depthWrite = false;
+    scene.add(floorGrid);
+
+    // -----------------------------------------------------------------------
+    // A climbable wall: broad enough to read from the distant camera, with
+    // restrained concrete seams. The invisible target plane lets the pointer
+    // guide the spider onto the vertical face.
+    // -----------------------------------------------------------------------
+    const wall = new THREE.Group();
+    const wallFrontZ = -10.55;
+    const wallWidth = 22;
+    const wallHeight = 10;
+    const wallDepth = 0.9;
+    const wallBody = new THREE.Mesh(
+      new THREE.BoxGeometry(wallWidth, wallHeight, wallDepth),
+      new THREE.MeshStandardMaterial({ color: 0x17191f, roughness: 0.92, metalness: 0.04 })
+    );
+    wallBody.position.set(0, wallHeight / 2, wallFrontZ - wallDepth / 2);
+    wallBody.castShadow = true;
+    wallBody.receiveShadow = true;
+    wall.add(wallBody);
+
+    const wallEdgeMaterial = new THREE.LineBasicMaterial({ color: 0x41434b, transparent: true, opacity: 0.42 });
+    const wallEdges = new THREE.LineSegments(new THREE.EdgesGeometry(wallBody.geometry), wallEdgeMaterial);
+    wallEdges.position.copy(wallBody.position);
+    wall.add(wallEdges);
+
+    const seamMaterial = new THREE.MeshStandardMaterial({ color: 0x0d0f13, roughness: 1 });
+    for (let row = 1; row < 5; row++) {
+      const seam = new THREE.Mesh(new THREE.BoxGeometry(wallWidth - 0.12, 0.025, 0.018), seamMaterial);
+      seam.position.set(0, row * 1.95, wallFrontZ + 0.012);
+      wall.add(seam);
+    }
+    for (let col = -4; col <= 4; col++) {
+      const seam = new THREE.Mesh(new THREE.BoxGeometry(0.018, wallHeight - 0.12, 0.018), seamMaterial);
+      seam.position.set(col * 2.35, wallHeight / 2, wallFrontZ + 0.014);
+      wall.add(seam);
+    }
+    const wallCap = new THREE.Mesh(
+      new THREE.BoxGeometry(wallWidth + 0.18, 0.14, wallDepth + 0.2),
+      new THREE.MeshStandardMaterial({ color: 0x24262d, roughness: 0.86 })
+    );
+    wallCap.position.set(0, wallHeight + 0.02, wallFrontZ - wallDepth / 2);
+    wallCap.castShadow = true;
+    wall.add(wallCap);
+    scene.add(wall);
+
+    const wallTargetPlane = new THREE.Mesh(
+      new THREE.PlaneGeometry(wallWidth, wallHeight),
+      new THREE.MeshBasicMaterial({ transparent: true, opacity: 0, depthWrite: false, side: THREE.DoubleSide })
+    );
+    wallTargetPlane.position.set(0, wallHeight / 2, wallFrontZ + 0.025);
+    scene.add(wallTargetPlane);
+
+    // -----------------------------------------------------------------------
+    // Black widow character. The body stays compact; the eight legs are long,
+    // thin, separately jointed and driven by a tripod gait with stretch/retract.
+    // Local +X is forward, +Y is away from the supporting surface, +Z is side.
+    // -----------------------------------------------------------------------
+    const spiderRoot = new THREE.Group();
+    scene.add(spiderRoot);
+    const BODY_HEIGHT = 0.56;
+
+    const shellMaterial = new THREE.MeshPhysicalMaterial({
+      color: 0x08080b, roughness: 0.22, metalness: 0.12, clearcoat: 1, clearcoatRoughness: 0.12
+    });
+    const shellHighlight = new THREE.MeshPhysicalMaterial({
+      color: 0x24232b, roughness: 0.26, metalness: 0.08, clearcoat: 0.8
+    });
+    const legMaterial = new THREE.MeshPhysicalMaterial({
+      color: 0x101015, roughness: 0.28, metalness: 0.12, clearcoat: 0.8, clearcoatRoughness: 0.18
+    });
+    const legHighlightMaterial = new THREE.MeshStandardMaterial({ color: 0x38343d, roughness: 0.35, metalness: 0.12 });
+    const jointMaterial = new THREE.MeshPhysicalMaterial({ color: 0x050508, roughness: 0.2, metalness: 0.16, clearcoat: 1 });
+    const redMaterial = new THREE.MeshPhysicalMaterial({
+      color: 0xc80e2d, roughness: 0.24, metalness: 0.04, clearcoat: 0.9, clearcoatRoughness: 0.16,
+      emissive: 0x2a0008, emissiveIntensity: 0.25, side: THREE.DoubleSide
+    });
+
+    const bodyGroup = new THREE.Group();
+    spiderRoot.add(bodyGroup);
+
+    // Small, bulbous teardrop abdomen, not an oversized elongated capsule.
+    const abdomen = new THREE.Mesh(new THREE.SphereGeometry(1, 40, 28), shellMaterial);
+    abdomen.scale.set(0.53, 0.37, 0.43);
+    abdomen.position.set(-0.43, 0.015, 0);
+    abdomen.castShadow = true;
+    bodyGroup.add(abdomen);
+
+    // Fine pedicel between abdomen and compact cephalothorax.
+    const pedicel = new THREE.Mesh(new THREE.CylinderGeometry(0.075, 0.095, 0.28, 16), shellMaterial);
+    pedicel.rotation.z = Math.PI / 2;
+    pedicel.position.set(-0.02, -0.005, 0);
+    pedicel.castShadow = true;
+    bodyGroup.add(pedicel);
+
+    const prosoma = new THREE.Mesh(new THREE.SphereGeometry(1, 36, 24), shellMaterial);
+    prosoma.scale.set(0.31, 0.235, 0.265);
+    prosoma.position.set(0.24, 0.035, 0);
+    prosoma.castShadow = true;
+    bodyGroup.add(prosoma);
+
+    // Subtle carapace sheen, kept small so the anatomy remains delicate.
+    const carapaceSheen = new THREE.Mesh(new THREE.SphereGeometry(1, 24, 16), shellHighlight);
+    carapaceSheen.scale.set(0.20, 0.035, 0.115);
+    carapaceSheen.position.set(0.24, 0.245, -0.015);
+    bodyGroup.add(carapaceSheen);
+
+    // Two scarlet dorsal lobes joined into a restrained hourglass-like mark.
+    function makeMarkShape() {
+      const s = new THREE.Shape();
+      s.moveTo(-0.34, -0.015);
+      s.bezierCurveTo(-0.48, -0.12, -0.50, -0.25, -0.36, -0.27);
+      s.bezierCurveTo(-0.25, -0.29, -0.18, -0.18, -0.12, -0.09);
+      s.bezierCurveTo(-0.04, -0.18, 0.06, -0.27, 0.16, -0.22);
+      s.bezierCurveTo(0.31, -0.15, 0.24, -0.02, 0.11, 0.015);
+      s.bezierCurveTo(0.25, 0.07, 0.31, 0.19, 0.16, 0.25);
+      s.bezierCurveTo(0.05, 0.30, -0.04, 0.18, -0.12, 0.09);
+      s.bezierCurveTo(-0.19, 0.19, -0.26, 0.28, -0.37, 0.24);
+      s.bezierCurveTo(-0.51, 0.19, -0.47, 0.06, -0.34, -0.015);
+      s.closePath();
+      return s;
+    }
+    const dorsalMark = new THREE.Mesh(new THREE.ShapeGeometry(makeMarkShape(), 16), redMaterial);
+    dorsalMark.rotation.x = -Math.PI / 2;
+    dorsalMark.position.set(-0.48, 0.355, 0);
+    dorsalMark.scale.set(0.82, 0.72, 1);
+    bodyGroup.add(dorsalMark);
+
+    // Small red lateral flecks, rather than a large cartoon pattern.
+    for (const side of [-1, 1]) {
+      const fleck = new THREE.Mesh(new THREE.SphereGeometry(1, 16, 10), redMaterial);
+      fleck.scale.set(0.075, 0.025, 0.035);
+      fleck.position.set(-0.66, 0.12, side * 0.30);
+      bodyGroup.add(fleck);
+    }
+
+    // Ventral hourglass: visible when the camera or wall orientation exposes the underside.
+    const ventralMark = new THREE.Mesh(new THREE.ShapeGeometry(makeMarkShape(), 16), redMaterial);
+    ventralMark.rotation.x = Math.PI / 2;
+    ventralMark.position.set(-0.48, -0.355, 0);
+    ventralMark.scale.set(0.76, 0.64, 1);
+    bodyGroup.add(ventralMark);
+
+    // Spinnerets at the rear.
+    for (const z of [-0.07, 0, 0.07]) {
+      const spinneret = new THREE.Mesh(new THREE.ConeGeometry(0.035, 0.14, 8), jointMaterial);
+      spinneret.rotation.z = -Math.PI / 2;
+      spinneret.position.set(-0.91, -0.01, z);
+      bodyGroup.add(spinneret);
+    }
+
+    // Eight small eyes and short pedipalps at the front.
+    const eyeGeometry = new THREE.SphereGeometry(0.035, 12, 10);
+    const eyePositions = [
+      [0.49, 0.12, -0.14], [0.53, 0.12, -0.09], [0.55, 0.10, -0.035], [0.55, 0.10, 0.035],
+      [0.53, 0.12, 0.09], [0.49, 0.12, 0.14], [0.43, 0.14, -0.09], [0.43, 0.14, 0.09]
+    ];
+    eyePositions.forEach(([x, y, z]) => {
+      const eye = new THREE.Mesh(eyeGeometry, jointMaterial);
+      eye.position.set(x, y, z);
+      bodyGroup.add(eye);
+    });
+
+    // Tiny chelicerae and pedipalps.
+    for (const side of [-1, 1]) {
+      const palp = new THREE.Mesh(new THREE.CylinderGeometry(0.018, 0.026, 0.24, 8), legMaterial);
+      palp.position.set(0.48, -0.10, side * 0.17);
+      palp.rotation.z = -0.52;
+      palp.rotation.x = side * 0.42;
+      bodyGroup.add(palp);
+      const fang = new THREE.Mesh(new THREE.ConeGeometry(0.018, 0.11, 8), jointMaterial);
+      fang.position.set(0.60, -0.16, side * 0.075);
+      fang.rotation.z = -0.42;
+      bodyGroup.add(fang);
+    }
+
+    // Bone helper: a tapered cylinder whose endpoints are changed every frame.
+    const yAxis = new THREE.Vector3(0, 1, 0);
+    function makeBone(topRadius, bottomRadius, material) {
+      const mesh = new THREE.Mesh(new THREE.CylinderGeometry(topRadius, bottomRadius, 1, 9, 1, false), material);
+      mesh.castShadow = true;
+      mesh.receiveShadow = true;
+      spiderRoot.add(mesh);
+      return mesh;
+    }
+    function placeBone(mesh, a, b) {
+      const direction = new THREE.Vector3().subVectors(b, a);
+      const length = Math.max(0.001, direction.length());
+      mesh.position.copy(a).add(b).multiplyScalar(0.5);
+      mesh.quaternion.setFromUnitVectors(yAxis, direction.normalize());
+      mesh.scale.set(1, length, 1);
+    }
+    function makeJoint(radius = 0.044) {
+      const mesh = new THREE.Mesh(new THREE.SphereGeometry(radius, 12, 10), jointMaterial);
+      mesh.castShadow = true;
+      spiderRoot.add(mesh);
+      return mesh;
+    }
+
+    const legConfigs = [
+      { id: 'L1', side: -1, pair: 0, attachX: 0.25, fore: 0.74, reach: 1.05, group: 'A', offset: 0.000, front: true },
+      { id: 'R1', side:  1, pair: 0, attachX: 0.25, fore: 0.74, reach: 1.05, group: 'B', offset: 0.018, front: true },
+      { id: 'L2', side: -1, pair: 1, attachX: 0.09, fore: 0.34, reach: 1.32, group: 'B', offset: 0.010, front: false },
+      { id: 'R2', side:  1, pair: 1, attachX: 0.09, fore: 0.34, reach: 1.32, group: 'A', offset: 0.026, front: false },
+      { id: 'L3', side: -1, pair: 2, attachX: -0.09, fore: -0.34, reach: 1.32, group: 'A', offset: 0.016, front: false },
+      { id: 'R3', side:  1, pair: 2, attachX: -0.09, fore: -0.34, reach: 1.32, group: 'B', offset: 0.030, front: false },
+      { id: 'L4', side: -1, pair: 3, attachX: -0.25, fore: -0.74, reach: 1.05, group: 'B', offset: 0.006, front: false },
+      { id: 'R4', side:  1, pair: 3, attachX: -0.25, fore: -0.74, reach: 1.05, group: 'A', offset: 0.022, front: false }
+    ];
+
+    const legs = legConfigs.map((cfg) => {
+      const radii = [0.045, 0.039, 0.034, 0.031, 0.026, 0.021, 0.016];
+      const bones = radii.map((r, i) => makeBone(r * 0.78, r, i === 2 || i === 4 ? legHighlightMaterial : legMaterial));
+      const joints = Array.from({ length: 6 }, (_, i) => makeJoint(i < 2 ? 0.043 : 0.035));
+      const foot = makeJoint(0.022);
+      return { ...cfg, bones, joints, foot, phase: 0, swing: false };
+    });
+
+    // Root starts in the foreground, at a modest scale in the wide scene.
+    spiderRoot.position.set(0, BODY_HEIGHT, 7.0);
+
+    // -----------------------------------------------------------------------
+    // Pointer target mapping: hit the vertical wall if the pointer is over it;
+    // otherwise intersect the original horizontal ground plane.
+    // -----------------------------------------------------------------------
+    const raycaster = new THREE.Raycaster();
+    const pointerNdc = new THREE.Vector2(0, 0);
+    const floorPlane = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0);
+    const planeHit = new THREE.Vector3();
+    let mouseInside = false;
+    let pointerMoved = false;
+    let orbiting = false;
+    let lastPointerX = 0;
+    let lastPointerY = 0;
+
+    let target = { type: 'ground', x: 4, z: 1, y: 0.1 };
+    let targetValid = true;
+    let wanderTimer = 2.2;
+    let wanderCount = 0;
+    let pushingTarget = false;
+    let investigationCycle = 0;
+    let idleClock = 0;
+    let speed = 0;
+    let gaitPhase = 0;
+    let motionClock = 0;
+    let lastProbeBeat = -1;
+    const worldShift = { x: 0, z: 0 };
+    const surfaceNormal = new THREE.Vector3(0, 1, 0);
+    const heading = new THREE.Vector3(1, 0, 0);
+    let surfaceMode = 'ground';
+    let transition = null;
+    const ripplePool = [];
+
+    function setTargetFromPointer() {
+      raycaster.setFromCamera(pointerNdc, camera);
+      const wallHit = raycaster.intersectObject(wallTargetPlane, false)[0];
+      if (wallHit) {
+        target = {
+          type: 'wall',
+          x: THREE.MathUtils.clamp(wallHit.point.x, -10.2, 10.2),
+          y: THREE.MathUtils.clamp(wallHit.point.y, 0.5, wallHeight - 0.65),
+          z: wallFrontZ + BODY_HEIGHT
+        };
+        targetValid = true;
+        return;
+      }
+      if (raycaster.ray.intersectPlane(floorPlane, planeHit)) {
+        target = {
+          type: 'ground',
+          x: THREE.MathUtils.clamp(planeHit.x, -28, 28),
+          z: THREE.MathUtils.clamp(planeHit.z, -30, 30),
+          y: 0
+        };
+        targetValid = true;
+      } else {
+        targetValid = false;
+      }
+    }
+
+    function onPointerMove(event) {
+      if (orbiting) {
+        const dx = event.clientX - lastPointerX;
+        const dy = event.clientY - lastPointerY;
+        cameraAzimuth -= dx * 0.006;
+        cameraElevation = THREE.MathUtils.clamp(cameraElevation + dy * 0.0045, 0.12, 1.15);
+        updateCamera();
+      } else {
+        pointerNdc.x = (event.clientX / window.innerWidth) * 2 - 1;
+        pointerNdc.y = -(event.clientY / window.innerHeight) * 2 + 1;
+        mouseInside = true;
+        idleClock = 0;
+        pointerMoved = true;
+      }
+      lastPointerX = event.clientX;
+      lastPointerY = event.clientY;
+    }
+    canvas.addEventListener('pointerenter', (event) => {
+      if (event.pointerType === 'mouse') {
+        mouseInside = true;
+        idleClock = 0;
+        pointerNdc.x = (event.clientX / window.innerWidth) * 2 - 1;
+        pointerNdc.y = -(event.clientY / window.innerHeight) * 2 + 1;
+      }
+    });
+    canvas.addEventListener('pointermove', onPointerMove);
+    canvas.addEventListener('pointerleave', () => {
+      if (!orbiting) mouseInside = false;
+    });
+    canvas.addEventListener('pointerdown', (event) => {
+      lastPointerX = event.clientX;
+      lastPointerY = event.clientY;
+      if (event.button === 2 || event.shiftKey) {
+        orbiting = true;
+        canvas.setPointerCapture?.(event.pointerId);
+      } else {
+        pointerNdc.x = (event.clientX / window.innerWidth) * 2 - 1;
+        pointerNdc.y = -(event.clientY / window.innerHeight) * 2 + 1;
+        mouseInside = true;
+        idleClock = 0;
+        pointerMoved = true;
+        setTargetFromPointer();
+        addRipple(spiderRoot.position.clone().setY(0.025), new THREE.Vector3(0, 1, 0), 0.65);
+      }
+    });
+    window.addEventListener('pointerup', () => { orbiting = false; });
+    canvas.addEventListener('contextmenu', (event) => event.preventDefault());
+    canvas.addEventListener('wheel', (event) => {
+      event.preventDefault();
+      cameraDistance = THREE.MathUtils.clamp(cameraDistance + event.deltaY * 0.026, minCameraDistance, maxCameraDistance);
+      updateCamera();
+    }, { passive: false });
+    window.addEventListener('blur', () => { mouseInside = false; orbiting = false; });
+
+    // -----------------------------------------------------------------------
+    // Reactive floor ripples, like the source canvas crawler.
+    // -----------------------------------------------------------------------
+    function addRipple(position, normal = new THREE.Vector3(0, 1, 0), force = 1) {
+      const geometry = new THREE.RingGeometry(0.88, 1.0, 36);
+      const material = new THREE.MeshBasicMaterial({
+        color: 0xb5a4b4, transparent: true, opacity: 0.42 * force,
+        side: THREE.DoubleSide, depthWrite: false
+      });
+      const ring = new THREE.Mesh(geometry, material);
+      ring.position.copy(position);
+      ring.quaternion.setFromUnitVectors(new THREE.Vector3(0, 0, 1), normal.clone().normalize());
+      ring.scale.setScalar(0.08);
+      scene.add(ring);
+      ripplePool.push({ mesh: ring, age: 0, life: 0.8 + force * 0.25, force });
+      if (ripplePool.length > 28) {
+        const old = ripplePool.shift();
+        scene.remove(old.mesh);
+        old.mesh.geometry.dispose();
+        old.mesh.material.dispose();
+      }
+    }
+
+    function updateRipples(dt) {
+      for (let i = ripplePool.length - 1; i >= 0; i--) {
+        const ripple = ripplePool[i];
+        ripple.age += dt;
+        const t = Math.min(1, ripple.age / ripple.life);
+        ripple.mesh.scale.setScalar(0.08 + t * (0.65 + ripple.force * 0.18));
+        ripple.mesh.material.opacity = (1 - t) * 0.38 * ripple.force;
+        if (t >= 1) {
+          scene.remove(ripple.mesh);
+          ripple.mesh.geometry.dispose();
+          ripple.mesh.material.dispose();
+          ripplePool.splice(i, 1);
+        }
+      }
+    }
+
+    // -----------------------------------------------------------------------
+    // Surface orientation and transitions: local spider +Y always points away
+    // from the surface; this lets the exact same animated legs work on floor
+    // and vertical wall.
+    // -----------------------------------------------------------------------
+    const basisMatrix = new THREE.Matrix4();
+    const localSide = new THREE.Vector3();
+    const smoothedNormal = new THREE.Vector3(0, 1, 0);
+
+    function applySpiderOrientation() {
+      const fwd = heading.clone().addScaledVector(surfaceNormal, -heading.dot(surfaceNormal)).normalize();
+      if (fwd.lengthSq() < 0.0001) fwd.set(1, 0, 0);
+      localSide.crossVectors(fwd, surfaceNormal).normalize();
+      basisMatrix.makeBasis(fwd, surfaceNormal, localSide);
+      spiderRoot.quaternion.setFromRotationMatrix(basisMatrix);
+    }
+
+    function beginTransition(toMode) {
+      const toNormal = toMode === 'wall' ? new THREE.Vector3(0, 0, 1) : new THREE.Vector3(0, 1, 0);
+      const toPosition = spiderRoot.position.clone();
+      if (toMode === 'wall') {
+        toPosition.z = wallFrontZ + BODY_HEIGHT;
+        toPosition.y = BODY_HEIGHT;
+      } else {
+        toPosition.z = wallFrontZ + BODY_HEIGHT;
+        toPosition.y = BODY_HEIGHT;
+      }
+      transition = {
+        fromPosition: spiderRoot.position.clone(),
+        toPosition,
+        fromNormal: surfaceNormal.clone(),
+        toNormal,
+        elapsed: 0,
+        duration: 0.85,
+        destination: toMode
+      };
+      surfaceMode = 'transition';
+    }
+
+    function updateTransition(dt) {
+      if (!transition) return false;
+      transition.elapsed += dt;
+      const raw = Math.min(1, transition.elapsed / transition.duration);
+      const t = raw * raw * (3 - 2 * raw);
+      spiderRoot.position.lerpVectors(transition.fromPosition, transition.toPosition, t);
+      surfaceNormal.lerpVectors(transition.fromNormal, transition.toNormal, t).normalize();
+      if (raw >= 1) {
+        surfaceMode = transition.destination;
+        surfaceNormal.copy(transition.toNormal);
+        transition = null;
+      }
+      return true;
+    }
+
+    // -----------------------------------------------------------------------
+    // Original crawler-like movement: easing, pointer pursuit, autonomous
+    // waypoints, idle investigation, edge-free roaming, and alternating legs.
+    // -----------------------------------------------------------------------
+    function chooseWanderTarget() {
+      wanderCount++;
+      if (wanderCount % 3 === 0) {
+        target = {
+          type: 'wall',
+          x: THREE.MathUtils.randFloat(-8.7, 8.7),
+          y: THREE.MathUtils.randFloat(4.0, 8.2),
+          z: wallFrontZ + BODY_HEIGHT
+        };
+      } else {
+        target = {
+          type: 'ground',
+          x: THREE.MathUtils.randFloat(-24, 24),
+          z: THREE.MathUtils.randFloat(-5, 25),
+          y: 0
+        };
+      }
+      targetValid = true;
+      wanderTimer = THREE.MathUtils.randFloat(3.0, 5.5);
+    }
+
+    function smoothStep(t) { return t * t * (3 - 2 * t); }
+    function smootherStep(t) { return t * t * t * (t * (t * 6 - 15) + 10); }
+
+    function updateMovement(dt) {
+      motionClock += dt;
+      if (mouseInside) {
+        setTargetFromPointer();
+      } else {
+        wanderTimer -= dt;
+        if (wanderTimer <= 0) chooseWanderTarget();
+      }
+
+      if (!targetValid) {
+        if (surfaceMode === 'wall') target = { type: 'wall', x: spiderRoot.position.x, y: 0.65, z: wallFrontZ + BODY_HEIGHT };
+        else target = { type: 'ground', x: spiderRoot.position.x + 2, z: spiderRoot.position.z + 1, y: 0 };
+      }
+
+      // Enter the vertical face by walking to its foot first.
+      if (surfaceMode === 'ground' && target.type === 'wall') {
+        const baseX = target.x;
+        const baseZ = wallFrontZ + BODY_HEIGHT;
+        const dx = baseX - spiderRoot.position.x;
+        const dz = baseZ - spiderRoot.position.z;
+        const distToBase = Math.hypot(dx, dz);
+        if (distToBase < 0.82) {
+          beginTransition('wall');
+          return;
+        }
+        moveOnGround(dx, dz, distToBase, dt, false);
+        return;
+      }
+
+      // On the wall, follow wall coordinates. A ground target makes the spider
+      // descend to the bottom, rotate back to the floor, then continue walking.
+      if (surfaceMode === 'wall' && target.type === 'ground') {
+        const dx = spiderRoot.position.x - spiderRoot.position.x;
+        const dy = BODY_HEIGHT - spiderRoot.position.y;
+        const distDown = Math.hypot(dx, dy);
+        if (distDown < 0.78) {
+          beginTransition('ground');
+          return;
+        }
+        moveOnWall(0, dy, distDown, dt, false);
+        return;
+      }
+
+      if (surfaceMode === 'wall' && target.type === 'wall') {
+        const desiredY = target.y + BODY_HEIGHT;
+        const dx = target.x - spiderRoot.position.x;
+        const dy = desiredY - spiderRoot.position.y;
+        const dist = Math.hypot(dx, dy);
+        const stationary = mouseInside && dist < 1.25;
+        pushingTarget = stationary && idleClock >= 1.8;
+        if (dist < 0.30) {
+          speed *= Math.pow(0.78, dt * 60);
+          if (!mouseInside) { wanderTimer = Math.min(wanderTimer, 0.1); }
+          return;
+        }
+        moveOnWall(dx, dy, dist, dt, stationary);
+        return;
+      }
+
+      if (surfaceMode === 'ground' && target.type === 'ground') {
+        const dx = target.x - spiderRoot.position.x;
+        const dz = target.z - spiderRoot.position.z;
+        const dist = Math.hypot(dx, dz);
+        const stationary = mouseInside && dist < 1.25;
+        pushingTarget = stationary && idleClock >= 1.8;
+        if (dist < 0.30) {
+          speed *= Math.pow(0.78, dt * 60);
+          if (!mouseInside) { wanderTimer = Math.min(wanderTimer, 0.1); }
+          return;
+        }
+        moveOnGround(dx, dz, dist, dt, stationary);
+      }
+    }
+
+    function updateSpeed(distance, dt, stationary) {
+      const running = mouseInside && distance > 7.5;
+      const desired = stationary ? 0 : Math.min(running ? 2.65 : 1.75, distance * 1.05);
+      const ease = 1 - Math.pow(1 - 0.12, dt * 60);
+      speed += (desired - speed) * ease;
+      if (speed < 0.012) speed = 0;
+      return running;
+    }
+
+    function updateHeading(dx, secondAxis, onWall, dt) {
+      const desired = onWall
+        ? new THREE.Vector3(dx, secondAxis, 0)
+        : new THREE.Vector3(dx, 0, secondAxis);
+      if (desired.lengthSq() < 0.00001) return;
+      desired.normalize();
+      const ease = 1 - Math.exp(-5.8 * dt);
+      heading.lerp(desired, ease).normalize();
+      heading.addScaledVector(surfaceNormal, -heading.dot(surfaceNormal)).normalize();
+      if (heading.lengthSq() < 0.001) heading.set(1, 0, 0);
+      applySpiderOrientation();
+    }
+
+    function moveOnGround(dx, dz, distance, dt, stationary) {
+      updateSpeed(distance, dt, stationary);
+      updateHeading(dx, dz, false, dt);
+      if (speed > 0) {
+        const step = Math.min(distance, speed * dt);
+        spiderRoot.position.x += (dx / distance) * step;
+        spiderRoot.position.z += (dz / distance) * step;
+      }
+      spiderRoot.position.y = BODY_HEIGHT + Math.sin(gaitPhase * Math.PI * 2) * (speed > 0.1 ? 0.018 : 0.006);
+      pushingTarget = stationary && speed < 0.08;
+      if (pushingTarget) {
+        investigationCycle += dt * 0.62;
+        const beat = Math.floor(investigationCycle * 2);
+        if (beat > lastProbeBeat) {
+          lastProbeBeat = beat;
+          addRipple(new THREE.Vector3(spiderRoot.position.x, 0.02, spiderRoot.position.z), new THREE.Vector3(0, 1, 0), 0.8);
+        }
+        const pushWave = 0.55 + 0.45 * Math.sin(investigationCycle * Math.PI * 2);
+        worldShift.x -= Math.cos(Math.atan2(dz, dx)) * 0.015 * pushWave;
+        worldShift.z -= Math.sin(Math.atan2(dz, dx)) * 0.015 * pushWave;
+      } else {
+        investigationCycle = Math.max(0, investigationCycle - dt * 0.8);
+      }
+    }
+
+    function moveOnWall(dx, dy, distance, dt, stationary) {
+      updateSpeed(distance, dt, stationary);
+      updateHeading(dx, dy, true, dt);
+      if (speed > 0) {
+        const step = Math.min(distance, speed * dt);
+        spiderRoot.position.x += (dx / distance) * step;
+        spiderRoot.position.y += (dy / distance) * step;
+      }
+      spiderRoot.position.z = wallFrontZ + BODY_HEIGHT;
+      pushingTarget = stationary && speed < 0.08;
+      if (pushingTarget) {
+        investigationCycle += dt * 0.62;
+      } else {
+        investigationCycle = Math.max(0, investigationCycle - dt * 0.8);
+      }
+    }
+
+    // -----------------------------------------------------------------------
+    // Articulated 3D gait: the foot reaches forward, lifts and retracts inward,
+    // then extends and plants. A two-link IK knee makes each leg visibly fold.
+    // -----------------------------------------------------------------------
+    function updateLegs(dt) {
+      const moving = speed > 0.055;
+      const gaitRate = moving ? (1.12 + Math.min(0.55, speed * 0.19)) : (pushingTarget ? 0.52 : 0.12);
+      gaitPhase = (gaitPhase + dt * gaitRate) % 1;
+      bodyGroup.position.y = Math.sin(motionClock * 5.2) * (moving ? 0.014 : 0.004);
+
+      for (const leg of legs) {
+        const phase = (gaitPhase + leg.offset + (leg.group === 'B' ? 0.5 : 0)) % 1;
+        let strideOffset;
+        let lift = 0;
+        let retract = 0;
+        if (phase < 0.65) {
+          const u = phase / 0.65;
+          strideOffset = THREE.MathUtils.lerp(0.29, -0.29, u);
+        } else {
+          const t = (phase - 0.65) / 0.35;
+          const eased = smootherStep(t);
+          strideOffset = THREE.MathUtils.lerp(-0.29, 0.29, eased);
+          lift = Math.sin(Math.PI * t) * 0.42;
+          retract = Math.sin(Math.PI * t) * 0.19;
+        }
+        if (!moving && !pushingTarget && phase > 0.65) {
+          // Let a step already in motion finish smoothly rather than snapping.
+          lift *= 0.88;
+        }
+
+        const hip = new THREE.Vector3(leg.attachX, -0.10 + bodyGroup.position.y, leg.side * 0.17);
+        const footReach = leg.reach - retract;
+        const foot = new THREE.Vector3(
+          leg.attachX + leg.fore + strideOffset + Math.min(0.14, speed * 0.055),
+          -BODY_HEIGHT + lift,
+          leg.side * footReach
+        );
+
+        // Two-link inverse kinematics in the spider's surface plane (X/Z).
+        const vx = foot.x - hip.x;
+        const vz = foot.z - hip.z;
+        const rawDistance = Math.max(0.06, Math.hypot(vx, vz));
+        const upperLength = 0.82;
+        const lowerLength = 1.00;
+        const d = THREE.MathUtils.clamp(rawDistance, Math.abs(upperLength - lowerLength) + 0.025, upperLength + lowerLength - 0.025);
+        const ux = vx / rawDistance;
+        const uz = vz / rawDistance;
+        const along = (upperLength * upperLength - lowerLength * lowerLength + d * d) / (2 * d);
+        const bendHeight = Math.sqrt(Math.max(0, upperLength * upperLength - along * along));
+        const perpX = -uz;
+        const perpZ = ux;
+        const bend = leg.side;
+        const knee = new THREE.Vector3(
+          hip.x + ux * along + perpX * bendHeight * bend,
+          THREE.MathUtils.lerp(hip.y, foot.y, 0.48) + 0.10 + lift * 0.24,
+          hip.z + uz * along + perpZ * bendHeight * bend
+        );
+
+        const lerpPoint = (a, b, t) => new THREE.Vector3().lerpVectors(a, b, t);
+        const points = [
+          hip,
+          lerpPoint(hip, knee, 0.13),
+          lerpPoint(hip, knee, 0.28),
+          lerpPoint(hip, knee, 0.78),
+          knee,
+          lerpPoint(knee, foot, 0.55),
+          lerpPoint(knee, foot, 0.83),
+          foot
+        ];
+
+        leg.bones.forEach((bone, i) => placeBone(bone, points[i], points[i + 1]));
+        leg.joints.forEach((joint, i) => joint.position.copy(points[i + 1]));
+        leg.foot.position.copy(foot);
+        leg.swing = phase >= 0.65;
+      }
+    }
+
+    // Start facing across the floor, then establish the correct local basis.
+    applySpiderOrientation();
+
+    // -----------------------------------------------------------------------
+    // Animation loop.
+    // -----------------------------------------------------------------------
+    const clock = new THREE.Clock();
+    function animate() {
+      requestAnimationFrame(animate);
+      const dt = Math.min(0.04, clock.getDelta());
+      idleClock = mouseInside ? idleClock + dt : 0;
+
+      if (transition) updateTransition(dt);
+      else updateMovement(dt);
+
+      // Keep orientation coherent through a surface transition and make the
+      // body/legs travel together as a single three-dimensional character.
+      applySpiderOrientation();
+      updateLegs(dt);
+      updateRipples(dt);
+
+      floorGrid.position.x = worldShift.x;
+      floorGrid.position.z = worldShift.z;
+      floorGrid.position.y = 0.006;
+      renderer.render(scene, camera);
+    }
+    animate();
+
+    window.addEventListener('resize', () => {
+      camera.aspect = window.innerWidth / window.innerHeight;
+      camera.updateProjectionMatrix();
+      renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 1.8));
+      renderer.setSize(window.innerWidth, window.innerHeight, false);
+    });
+  </script>
+</body>
+</html>

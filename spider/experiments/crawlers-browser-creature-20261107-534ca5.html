@@ -1,0 +1,991 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Crawlers — a digital creature living in your browser</title>
+<style>
+  :root{
+    --paper:#efe9df; --ink:#2a2520; --muted:#6b6259; --accent:#b06b2c;
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0;padding:0}
+  body{
+    background:var(--paper);
+    color:var(--ink);
+    font-family:ui-serif,Georgia,"Times New Roman",serif;
+    font-size:17px;line-height:1.72;
+    -webkit-font-smoothing:antialiased;
+    overflow-x:hidden;
+  }
+  #cv{position:fixed;inset:0;width:100%;height:100%;pointer-events:none;z-index:10}
+  #page{position:relative;z-index:1}
+  #content{max-width:640px;margin:0 auto;padding:16vh 26px 46vh}
+
+  .eyebrow{
+    font:600 11px/1.4 ui-monospace,SFMono-Regular,Menlo,monospace;
+    letter-spacing:.22em;text-transform:uppercase;color:var(--accent);
+    margin:0 0 16px;
+  }
+  h1{
+    font-family:ui-sans-serif,system-ui,-apple-system,"Segoe UI",Helvetica,Arial,sans-serif;
+    font-size:clamp(40px,7.5vw,66px);line-height:1.0;letter-spacing:-.025em;
+    margin:0 0 12px;font-weight:700;
+  }
+  .lede{font-size:19px;color:var(--muted);font-style:italic;margin:0 0 44px}
+  h2{
+    font-family:ui-sans-serif,system-ui,-apple-system,"Segoe UI",Helvetica,Arial,sans-serif;
+    font-size:12px;letter-spacing:.16em;text-transform:uppercase;
+    color:#4a423a;margin:52px 0 16px;font-weight:700;
+  }
+  h3{
+    font-family:ui-sans-serif,system-ui,-apple-system,"Segoe UI",Helvetica,Arial,sans-serif;
+    font-size:14px;margin:26px 0 8px;font-weight:600;color:#3b342d;
+  }
+  p{margin:0 0 20px}
+  em{font-style:italic}
+  ol,ul{margin:0 0 20px;padding-left:24px}
+  li{margin:0 0 10px}
+  .refs{font-size:13.5px;line-height:1.62;color:#5d554c}
+  .refs li{margin-bottom:14px}
+  .rule{height:1px;background:#d9d0c3;border:0;margin:46px 0}
+
+  /* word spans — the spider lights these up when a foot lands */
+  .w{transition:color .5s ease, text-shadow .5s ease}
+  .w.lit{color:#b4521c;text-shadow:0 0 14px rgba(200,110,40,.30)}
+</style>
+</head>
+<body>
+
+<canvas id="cv" aria-hidden="true"></canvas>
+
+<div id="page">
+  <article id="content">
+    <p class="eyebrow">Kinetic work · feedback loops</p>
+    <h1>Crawlers</h1>
+    <p class="lede">A digital creature living in your browser.</p>
+
+    <p>Crawlers is a kinetic, interactive work with feedback loops operating on multiple levels. Its motion system combines algorithmic and nature-inspired distributed models, inviting viewers to explore the underlying mechanisms. Its visual language reflects a similar balance: points, squares, and circles combine rigid technical expression with dynamic, lifelike movement.</p>
+
+    <p>Interaction with the page attempts to blur the boundaries between the artwork and the viewer, while also reflecting on contemporary questions surrounding web crawlers, bots, and data collection. Page generation introduces a simple generative system, a stripped-down LLM predictor, offering viewers an opportunity to experience machine learning at its core.</p>
+
+    <p>In the age of AI agents, we increasingly find ourselves personifying probabilistic algorithms. The work invites us to reflect on this tendency and consider deeper questions about what is alive, what is not, and what we are. How are we different from machines?</p>
+
+    <p>Watch it for a while. It rarely repeats itself. It climbs the ledges of a sentence, hangs beneath a line of type, drops onto the next paragraph, and pauses — as if reading — before moving on. Every footfall leaves a small warm trace in the text, a mark that fades almost as soon as it is made.</p>
+
+    <hr class="rule">
+
+    <h2>References</h2>
+    <ol class="refs">
+      <li>Ijspeert, A. J., Crespi, A., Ryczko, D., and Cabelguen, J.-M. (2007). From swimming to walking with a salamander robot driven by a spinal cord model. <em>Science</em>, 315(5817), 1416–1420.</li>
+      <li>Owaki, D., Goda, M., Miyazawa, S., and Ishiguro, A. (2017). A minimal model describing hexapedal interlimb coordination: The Tegotae-based approach. <em>Frontiers in Neurorobotics</em>, 11, 29.</li>
+    </ol>
+
+    <h2>How to Interact with Your Crawler</h2>
+
+    <h3>1. Wake up your crawler</h3>
+    <p>When you open your NFT, you'll find your crawler sleeping on its own generated webpage. Interact with it to wake it up, then guide its movement around the page. Move your cursor close and it will startle and scurry away; leave it alone and it will settle back into a slow, patient wander.</p>
+
+    <h3>2. Take your crawler for a walk</h3>
+    <p>You can bring your crawler to other websites by saving it as a bookmark in your browser.</p>
+    <p><strong>Easy way (recommended):</strong></p>
+    <ul>
+      <li>Drag the Bookmark button to your browser's bookmarks bar.</li>
+      <li>That's it! Your crawler is ready to explore.</li>
+    </ul>
+    <p><strong>Alternative (if your bookmarks bar isn't available):</strong></p>
+    <ol>
+      <li>Bookmark the current page in your browser.</li>
+      <li>Click the Bookmark button on the crawler page to copy the special bookmarklet code.</li>
+      <li>Open your new bookmark's settings and select Edit.</li>
+      <li>Delete the existing URL and paste the copied code in its place.</li>
+      <li>Save your changes.</li>
+    </ol>
+
+    <h3>3. Explore the web together</h3>
+    <p>Once you've saved your crawler as a bookmark, visit any website and click your crawler bookmark. Your crawler will appear from offscreen and begin exploring and interacting with the page.</p>
+
+    <p><strong>A few things to keep in mind</strong></p>
+    <p>This is still an experimental experience. Your crawler may take a few moments to appear, and some websites aren't fully compatible yet. Wikipedia works particularly well and is a great place to start.</p>
+
+    <hr class="rule">
+
+    <p class="refs">The specimen rendered above is a small-scale <em>Badumna insignis</em> — a black house spider — reconstructed procedurally: ten articulated legs of seven segments each, a caramel-and-cream carapace, and an abdomen marked with dark chevrons. It walks on whatever surface the page provides: the plane of the paper, the ledges of a line of type, the front faces of a paragraph, and the undersides of a sentence.</p>
+  </article>
+</div>
+
+<script>
+'use strict';
+(function () {
+  /* ------------------------------------------------------------------ *
+   * 0. math helpers
+   * ------------------------------------------------------------------ */
+  const TAU = Math.PI * 2;
+  const clamp = (v, a, b) => (v < a ? a : v > b ? b : v);
+  const lerp = (a, b, t) => a + (b - a) * t;
+  const rand = (a, b) => a + Math.random() * (b - a);
+
+  const vadd = (a, b) => [a[0] + b[0], a[1] + b[1], a[2] + b[2]];
+  const vsub = (a, b) => [a[0] - b[0], a[1] - b[1], a[2] - b[2]];
+  const vmul = (a, s) => [a[0] * s, a[1] * s, a[2] * s];
+  const vdot = (a, b) => a[0] * b[0] + a[1] * b[1] + a[2] * b[2];
+  const vcross = (a, b) => [
+    a[1] * b[2] - a[2] * b[1],
+    a[2] * b[0] - a[0] * b[2],
+    a[0] * b[1] - a[1] * b[0]
+  ];
+  const vlen = (a) => Math.hypot(a[0], a[1], a[2]);
+  const vnorm = (a) => { const l = vlen(a) || 1; return [a[0] / l, a[1] / l, a[2] / l]; };
+  const vlerp = (a, b, t) => [lerp(a[0], b[0], t), lerp(a[1], b[1], t), lerp(a[2], b[2], t)];
+
+  /* quaternion helpers — used to smoothly rotate the spider between surfaces */
+  function quatFromBasis(R, U, F) {
+    const m00 = R[0], m01 = U[0], m02 = F[0];
+    const m10 = R[1], m11 = U[1], m12 = F[1];
+    const m20 = R[2], m21 = U[2], m22 = F[2];
+    const tr = m00 + m11 + m22;
+    let x, y, z, w, s;
+    if (tr > 0) {
+      s = Math.sqrt(tr + 1) * 2; w = 0.25 * s;
+      x = (m21 - m12) / s; y = (m02 - m20) / s; z = (m10 - m01) / s;
+    } else if (m00 > m11 && m00 > m22) {
+      s = Math.sqrt(1 + m00 - m11 - m22) * 2; w = (m21 - m12) / s;
+      x = 0.25 * s; y = (m01 + m10) / s; z = (m02 + m20) / s;
+    } else if (m11 > m22) {
+      s = Math.sqrt(1 + m11 - m00 - m22) * 2; w = (m02 - m20) / s;
+      x = (m01 + m10) / s; y = 0.25 * s; z = (m12 + m21) / s;
+    } else {
+      s = Math.sqrt(1 + m22 - m00 - m11) * 2; w = (m10 - m01) / s;
+      x = (m02 + m20) / s; y = (m12 + m21) / s; z = 0.25 * s;
+    }
+    const l = Math.hypot(x, y, z, w) || 1;
+    return [x / l, y / l, z / l, w / l];
+  }
+  function basisFromQuat(q) {
+    const x = q[0], y = q[1], z = q[2], w = q[3];
+    const xx = x * x, yy = y * y, zz = z * z;
+    const xy = x * y, xz = x * z, yz = y * z;
+    const wx = w * x, wy = w * y, wz = w * z;
+    return [
+      [1 - 2 * (yy + zz), 2 * (xy + wz), 2 * (xz - wy)],   // right
+      [2 * (xy - wz), 1 - 2 * (xx + zz), 2 * (yz + wx)],   // up
+      [2 * (xz + wy), 2 * (yz - wx), 1 - 2 * (xx + yy)]    // forward
+    ];
+  }
+  function quatSlerp(a, b, t) {
+    let d = a[0] * b[0] + a[1] * b[1] + a[2] * b[2] + a[3] * b[3];
+    let bb = b;
+    if (d < 0) { d = -d; bb = [-b[0], -b[1], -b[2], -b[3]]; }
+    if (d > 0.9995) {
+      const r = [
+        lerp(a[0], bb[0], t), lerp(a[1], bb[1], t),
+        lerp(a[2], bb[2], t), lerp(a[3], bb[3], t)
+      ];
+      const l = Math.hypot(r[0], r[1], r[2], r[3]) || 1;
+      return [r[0] / l, r[1] / l, r[2] / l, r[3] / l];
+    }
+    const th = Math.acos(clamp(d, -1, 1));
+    const s = Math.sin(th);
+    const w1 = Math.sin((1 - t) * th) / s;
+    const w2 = Math.sin(t * th) / s;
+    return [
+      a[0] * w1 + bb[0] * w2,
+      a[1] * w1 + bb[1] * w2,
+      a[2] * w1 + bb[2] * w2,
+      a[3] * w1 + bb[3] * w2
+    ];
+  }
+
+  /* ------------------------------------------------------------------ *
+   * 1. canvas / camera
+   * ------------------------------------------------------------------ */
+  const cv = document.getElementById('cv');
+  const ctx = cv.getContext('2d');
+  let W = 1, H = 1, DPR = 1;
+
+  function resizeCanvas() {
+    DPR = Math.min(2, window.devicePixelRatio || 1);
+    W = Math.max(1, window.innerWidth);
+    H = Math.max(1, window.innerHeight);
+    cv.width = Math.round(W * DPR);
+    cv.height = Math.round(H * DPR);
+    cv.style.width = W + 'px';
+    cv.style.height = H + 'px';
+    ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
+  }
+
+  let scrollX = 0, scrollY = 0;
+  function readScroll() {
+    scrollX = window.pageXOffset || window.scrollX || 0;
+    scrollY = window.pageYOffset || window.scrollY || 0;
+  }
+
+  const FOCAL = 1500;            // perspective strength
+  let parallaxX = 0, parallaxY = 0;
+
+  function proj(p) {             // world (document coords) -> screen
+    const vx = p[0] - scrollX;
+    const vy = p[1] - scrollY;
+    const z = p[2];
+    const d = FOCAL / Math.max(240, FOCAL - z);
+    const cx = W * 0.5 + parallaxX;
+    const cy = H * 0.5 + parallaxY;
+    return [cx + (vx - cx) * d, cy + (vy - cy) * d, d];
+  }
+
+  /* ------------------------------------------------------------------ *
+   * 2. the spider's proportions
+   * ------------------------------------------------------------------ */
+  const SIZE = 15;               // 1 model unit = 15 css px
+  const STAND = 0.80;            // body height above the surface it walks on
+  const BODY_H = STAND * SIZE;
+  const THICK = 9;               // z-thickness of a line of text (a little ledge)
+
+  /* ten legs: five per side, splayed wide so the stance is broad */
+  const LEG_YAW = [0.98, 0.46, 0.0, -0.46, -0.92];
+  const LEG_Z = [0.52, 0.28, 0.02, -0.26, -0.50];
+  const LEG_REACH = [1.46, 1.58, 1.64, 1.56, 1.44];
+  const LEG_PHASE = [0.0, 0.5, 0.0, 0.5, 0.0];
+
+  const LEGS = [];
+  for (const side of [-1, 1]) {
+    for (let k = 0; k < 5; k++) {
+      const yaw = LEG_YAW[k];
+      const dir = [side * Math.cos(yaw), 0, Math.sin(yaw)];
+      const hip = [side * 0.26, -0.03, LEG_Z[k]];
+      const reach = LEG_REACH[k];
+      LEGS.push({
+        side, k, dir, hip,
+        rest: [hip[0] + dir[0] * reach, -STAND, hip[2] + dir[2] * reach],
+        phase: (LEG_PHASE[k] + (side > 0 ? 0.5 : 0)) % 1,
+        wasStance: false
+      });
+    }
+  }
+
+  const SEG_R = [0.115, 0.100, 0.086, 0.072, 0.058, 0.045, 0.032];
+  const SEG_COL = [
+    '#3f2d1e', '#6a4a29', '#b4874a', '#8d6335', '#c09a60', '#a87c46', '#8a6535'
+  ];
+  const SEG_BAND = [null, null, '#4a3524', null, '#4a3524', null, null];
+
+  /* ------------------------------------------------------------------ *
+   * 3. body meshes
+   * ------------------------------------------------------------------ */
+  const LIGHT = vnorm([-0.42, -0.62, 0.66]);
+  const LEVELS = 10;
+  const MESHES = [];
+
+  function hash3(x, y, z) {
+    const s = Math.sin(x * 12.9898 + y * 78.233 + z * 37.719) * 43758.5453;
+    return s - Math.floor(s);
+  }
+  function shadeTable(rgb) {
+    const out = new Array(LEVELS);
+    for (let i = 0; i < LEVELS; i++) {
+      const k = 0.52 + (i / (LEVELS - 1)) * 0.78;
+      out[i] = 'rgb(' +
+        Math.round(clamp(rgb[0] * k, 0, 255)) + ',' +
+        Math.round(clamp(rgb[1] * k, 0, 255)) + ',' +
+        Math.round(clamp(rgb[2] * k, 0, 255)) + ')';
+    }
+    return out;
+  }
+  const darken = (c, k) => [c[0] * k, c[1] * k, c[2] * k];
+
+  /* chelicerae + anterior face: rich caramel with golden-amber undertone */
+  function paintCheli(c, n) {
+    let col = [124, 84, 42];
+    if (n[1] > 0.2) col = [150, 104, 54];
+    const h = hash3(Math.round(c[0] * 90), Math.round(c[1] * 90), Math.round(c[2] * 90));
+    if (h > 0.82) col = darken(col, 0.55);
+    return col;
+  }
+
+  /* cephalothorax: pale median stripe flanked by espresso bands, mottled sides */
+  function paintProsoma(c, n) {
+    const ax = Math.abs(c[0]);
+    let col;
+    if (n[1] > 0.12) {                       // dorsal surface
+      if (ax < 0.085) col = [234, 216, 172];
+      else if (ax < 0.20) col = [70, 50, 34];
+      else col = [126, 86, 44];
+    } else if (n[1] > -0.45) {               // flanks
+      col = [140, 96, 52];
+    } else {
+      col = [92, 66, 42];                    // underside
+    }
+    const h = hash3(Math.round(c[0] * 70), Math.round(c[1] * 70), Math.round(c[2] * 70));
+    if (h > 0.87) col = darken(col, 0.5);
+    else if (h > 0.79) col = darken(col, 0.74);
+    return col;
+  }
+
+  /* abdomen: mottled tan, dark anterior stripe, chevrons, lateral blotches */
+  function paintAbdomen(c, n) {
+    const ax = Math.abs(c[0]);
+    const zz = c[2];
+    let col;
+    if (n[1] > 0.05) {
+      col = [172, 136, 92];
+      if (ax < 0.11 && zz > -0.62) col = [70, 50, 34];          // dorsal stripe
+      if (zz < -0.72 && ax < 0.36) {                            // chevrons
+        const t = zz * 2.4 + ax * 1.5;
+        const m = t - Math.floor(t);
+        if (m < 0.17) col = [56, 40, 28];
+      }
+      if (ax > 0.24 && ax < 0.46 && zz > -1.2 && zz < -0.2) {   // flank blotches
+        const h = hash3(Math.round(c[0] * 55), 3, Math.round(c[2] * 55));
+        if (h > 0.62) col = [74, 52, 34];
+      }
+    } else if (n[1] > -0.5) {
+      col = [156, 120, 78];
+    } else {
+      col = [98, 74, 48];
+    }
+    const h = hash3(Math.round(c[0] * 85), Math.round(c[1] * 85), Math.round(c[2] * 85));
+    if (h > 0.86) col = darken(col, 0.55);
+    else if (h > 0.76) col = darken(col, 0.8);
+    return col;
+  }
+
+  function addEllipsoid(cx, cy, cz, rx, ry, rz, painter, nu, nv) {
+    nu = nu || 12; nv = nv || 8;
+    const pos = [];
+    for (let j = 0; j <= nv; j++) {
+      const v = j / nv, th = v * Math.PI, st = Math.sin(th), ct = Math.cos(th);
+      for (let i = 0; i <= nu; i++) {
+        const ph = (i / nu) * TAU;
+        pos.push([cx + st * Math.cos(ph) * rx, cy + ct * ry, cz + st * Math.sin(ph) * rz]);
+      }
+    }
+    const faces = [];
+    const centre = [cx, cy, cz];
+    for (let j = 0; j < nv; j++) {
+      for (let i = 0; i < nu; i++) {
+        const a = j * (nu + 1) + i, b = a + 1, c = a + nu + 1, d = c + 1;
+        faces.push([a, c, b], [b, c, d]);
+      }
+    }
+    const out = [];
+    for (const t of faces) {
+      const p0 = pos[t[0]], p1 = pos[t[1]], p2 = pos[t[2]];
+      let n = vnorm(vcross(vsub(p1, p0), vsub(p2, p0)));
+      const cen = [(p0[0] + p1[0] + p2[0]) / 3, (p0[1] + p1[1] + p2[1]) / 3, (p0[2] + p1[2] + p2[2]) / 3];
+      if (vdot(n, vsub(cen, centre)) < 0) n = vmul(n, -1);
+      out.push({ t, n, cols: shadeTable(painter(cen, n)) });
+    }
+    MESHES.push({
+      pos,
+      faces: out,
+      wp: pos.map(() => [0, 0, 0]),
+      sp: pos.map(() => [0, 0, 0])
+    });
+  }
+
+  function buildBody() {
+    MESHES.length = 0;
+    addEllipsoid(0, 0.00, 0.12, 0.42, 0.30, 0.46, paintProsoma, 13, 9);
+    addEllipsoid(0, -0.02, -0.78, 0.50, 0.44, 0.72, paintAbdomen, 13, 9);
+    addEllipsoid(-0.14, -0.11, 0.50, 0.11, 0.14, 0.17, paintCheli, 7, 5);
+    addEllipsoid(0.14, -0.11, 0.50, 0.11, 0.14, 0.17, paintCheli, 7, 5);
+  }
+
+  /* ------------------------------------------------------------------ *
+   * 4. the surfaces the spider can walk on
+   * ------------------------------------------------------------------ */
+  let LINES = [];
+
+  function surfPoint(s, u, v) {
+    return [
+      s.ox + s.U[0] * u + s.V[0] * v,
+      s.oy + s.U[1] * u + s.V[1] * v,
+      s.oz + s.U[2] * u + s.V[2] * v
+    ];
+  }
+  function pageSurface() {
+    const top = scrollY - 260;
+    return {
+      ox: 0, oy: top, oz: 0,
+      U: [1, 0, 0], V: [0, 1, 0], N: [0, 0, 1],
+      ulen: Math.max(W, 320), vlen: Math.max(H + 620, 900), kind: 'page'
+    };
+  }
+  function surfLine(l, kind) {
+    const x0 = l.x0, y0 = l.y0, x1 = l.x1, y1 = l.y1;
+    const w = x1 - x0, h = y1 - y0;
+    switch (kind) {
+      case 'top':
+        return { ox: x0, oy: y0, oz: 0, U: [1, 0, 0], V: [0, 0, 1], N: [0, -1, 0], ulen: w, vlen: THICK, kind };
+      case 'bottom':
+        return { ox: x0, oy: y1, oz: 0, U: [1, 0, 0], V: [0, 0, 1], N: [0, 1, 0], ulen: w, vlen: THICK, kind };
+      case 'front':
+        return { ox: x1, oy: y1, oz: THICK, U: [-1, 0, 0], V: [0, -1, 0], N: [0, 0, 1], ulen: w, vlen: h, kind };
+      case 'left':
+        return { ox: x0, oy: y1, oz: THICK, U: [0, -1, 0], V: [0, 0, -1], N: [-1, 0, 0], ulen: h, vlen: THICK, kind };
+      default:
+        return { ox: x1, oy: y1, oz: THICK, U: [0, -1, 0], V: [0, 0, 1], N: [1, 0, 0], ulen: h, vlen: THICK, kind };
+    }
+  }
+
+  /* ------------------------------------------------------------------ *
+   * 5. spider state
+   * ------------------------------------------------------------------ */
+  const S = {
+    pos: [0, 0, BODY_H],
+    R: [1, 0, 0], U: [0, 1, 0], F: [0, 0, 1],
+    surf: null, u: 0, v: 0, dir: 1,
+    state: 'walk', t: 0, dur: 1,
+    fromPos: [0, 0, 0], toPos: [0, 0, 0],
+    fromQ: null, toQ: null,
+    pending: null, pendingDir: 1,
+    arcN: [0, 0, 1], arcAmt: 0,
+    gaitPhase: 0,
+    speed: 42,
+    alert: 0,
+    walkT: 0, walkLimit: 2
+  };
+
+  function updatePosFromSurf() {
+    const p = surfPoint(S.surf, S.u, S.v);
+    S.pos = [
+      p[0] + S.surf.N[0] * BODY_H,
+      p[1] + S.surf.N[1] * BODY_H,
+      p[2] + S.surf.N[2] * BODY_H
+    ];
+  }
+
+  function snapBasis() {
+    const up = S.surf.N;
+    let fwd = vmul(S.surf.U, S.dir);
+    fwd = vsub(fwd, vmul(up, vdot(fwd, up)));
+    if (vlen(fwd) < 0.15) fwd = vnorm(vcross(up, [0, 0, 1]));
+    fwd = vnorm(fwd);
+    S.U = up;
+    S.F = fwd;
+    S.R = vnorm(vcross(up, fwd));
+  }
+
+  function pickSurface() {
+    const visTop = scrollY - 90;
+    const visBot = scrollY + H + 90;
+
+    if (Math.random() < 0.34 || LINES.length === 0) {
+      const s = pageSurface();
+      const u = clamp(S.pos[0] + rand(-280, 280), 24, s.ulen - 24);
+      const v = clamp(S.pos[1] - s.oy + rand(-170, 170), 24, s.vlen - 24);
+      return { surf: s, u, v };
+    }
+
+    const px = S.pos[0], py = S.pos[1];
+    const cands = [];
+    for (const l of LINES) {
+      if (l.y1 < visTop || l.y0 > visBot) continue;
+      if (l.x1 - l.x0 < 70) continue;
+      const cx = (l.x0 + l.x1) * 0.5, cy = (l.y0 + l.y1) * 0.5;
+      cands.push({ l, d: (cx - px) * (cx - px) + (cy - py) * (cy - py) });
+    }
+    if (!cands.length) return null;
+
+    cands.sort((a, b) => a.d - b.d);
+    const pool = cands.slice(0, Math.min(6, cands.length));
+    const line = pool[(Math.random() * pool.length) | 0].l;
+
+    const r = Math.random();
+    let kind;
+    if (r < 0.40) kind = 'top';
+    else if (r < 0.68) kind = 'front';
+    else if (r < 0.86) kind = 'bottom';
+    else if (r < 0.93) kind = 'left';
+    else kind = 'right';
+
+    const surf = surfLine(line, kind);
+    const u = rand(12, Math.max(13, surf.ulen - 12));
+    return { surf, u, v: surf.vlen * 0.5 };
+  }
+
+  function beginTravel(target) {
+    S.pending = target;
+    S.pendingDir = Math.random() < 0.5 ? -1 : 1;
+
+    const p = surfPoint(target.surf, target.u, target.v);
+    S.fromPos = S.pos.slice();
+    S.toPos = [
+      p[0] + target.surf.N[0] * BODY_H,
+      p[1] + target.surf.N[1] * BODY_H,
+      p[2] + target.surf.N[2] * BODY_H
+    ];
+
+    const up = target.surf.N;
+    let fwd = vmul(target.surf.U, S.pendingDir);
+    fwd = vsub(fwd, vmul(up, vdot(fwd, up)));
+    if (vlen(fwd) < 0.15) fwd = vnorm(vcross(up, [0, 0, 1]));
+    fwd = vnorm(fwd);
+    const right = vnorm(vcross(up, fwd));
+
+    S.fromQ = quatFromBasis(S.R, S.U, S.F);
+    S.toQ = quatFromBasis(right, up, fwd);
+
+    const dist = vlen(vsub(S.toPos, S.fromPos));
+    S.dur = clamp(dist / 170 + 0.4, 0.42, 1.45);
+    S.arcN = [0, 0, 1];
+    S.arcAmt = clamp(dist * 0.10, 1.5, 22);
+    S.t = 0;
+    S.state = 'travel';
+  }
+
+  function chooseNext() {
+    const target = pickSurface();
+    if (target) {
+      beginTravel(target);
+    } else {
+      S.dir *= -1;
+      S.u = clamp(S.u, 10, Math.max(11, S.surf.ulen - 10));
+      S.walkT = 0;
+      S.walkLimit = rand(1.2, 2.6);
+    }
+  }
+
+  function arrive() {
+    const t = S.pending;
+    S.surf = t.surf;
+    S.u = t.u;
+    S.v = t.v;
+    S.dir = S.pendingDir;
+    S.state = 'walk';
+    S.walkT = 0;
+    S.walkLimit = rand(1.2, 3.4);
+    snapBasis();
+    updatePosFromSurf();
+  }
+
+  function initSpider() {
+    readScroll();
+    S.surf = pageSurface();
+    S.u = clamp(W * 0.5, 30, S.surf.ulen - 30);
+    S.v = clamp(scrollY + H * 0.45 - S.surf.oy, 40, S.surf.vlen - 40);
+    S.dir = 1;
+    S.state = 'walk';
+    S.walkLimit = 2.2;
+    snapBasis();
+    updatePosFromSurf();
+  }
+
+  /* ------------------------------------------------------------------ *
+   * 6. mouse
+   * ------------------------------------------------------------------ */
+  const mouse = { x: -9999, y: -9999, cx: -9999, cy: -9999, active: false };
+  window.addEventListener('pointermove', (e) => {
+    mouse.cx = e.clientX; mouse.cy = e.clientY;
+    mouse.x = e.clientX + scrollX;
+    mouse.y = e.clientY + scrollY;
+    mouse.active = true;
+  }, { passive: true });
+  window.addEventListener('pointerleave', () => { mouse.active = false; }, { passive: true });
+
+  /* ------------------------------------------------------------------ *
+   * 7. per-frame update
+   * ------------------------------------------------------------------ */
+  function update(dt) {
+    // gentle camera parallax
+    const tx = mouse.active ? (mouse.cx / W - 0.5) * -26 : 0;
+    const ty = mouse.active ? (mouse.cy / H - 0.5) * -26 : 0;
+    parallaxX += (tx - parallaxX) * Math.min(1, dt * 3);
+    parallaxY += (ty - parallaxY) * Math.min(1, dt * 3);
+
+    // startle response
+    const d = Math.hypot(mouse.x - S.pos[0], mouse.y - S.pos[1]);
+    const ta = (mouse.active && d < 150) ? clamp(1 - d / 150, 0, 1) : 0;
+    S.alert += (ta - S.alert) * Math.min(1, dt * 6);
+
+    const spd = S.speed * (1 + S.alert * 1.9);
+
+    if (S.state === 'walk' && S.surf) {
+      S.u += S.dir * spd * dt;
+      S.walkT += dt;
+      const lo = 8, hi = S.surf.ulen - 8;
+      if (S.u < lo || S.u > hi || S.walkT > S.walkLimit) {
+        chooseNext();
+      } else {
+        updatePosFromSurf();
+      }
+      S.gaitPhase += dt * (spd / 30);
+    } else if (S.state === 'travel') {
+      S.t += dt / S.dur;
+      const t = clamp(S.t, 0, 1);
+      const e = t < 0.5 ? 2 * t * t : 1 - Math.pow(-2 * t + 2, 2) / 2;
+
+      const base = vlerp(S.fromPos, S.toPos, e);
+      const arc = Math.sin(Math.PI * e) * S.arcAmt;
+      S.pos = vadd(base, vmul(S.arcN, arc));
+
+      const q = quatSlerp(S.fromQ, S.toQ, e);
+      const B = basisFromQuat(q);
+      S.R = B[0]; S.U = B[1]; S.F = B[2];
+
+      S.gaitPhase += dt * (spd / 24);
+      if (t >= 1) arrive();
+    }
+
+    S.gaitPhase %= 1;
+  }
+
+  /* ------------------------------------------------------------------ *
+   * 8. rendering
+   * ------------------------------------------------------------------ */
+  const items = [];
+
+  function toWorld(p) {
+    return [
+      S.pos[0] + (S.R[0] * p[0] + S.U[0] * p[1] + S.F[0] * p[2]) * SIZE,
+      S.pos[1] + (S.R[1] * p[0] + S.U[1] * p[1] + S.F[1] * p[2]) * SIZE,
+      S.pos[2] + (S.R[2] * p[0] + S.U[2] * p[1] + S.F[2] * p[2]) * SIZE
+    ];
+  }
+
+  function drawShadow() {
+    // soft contact shadow on the surface the spider is standing on
+    const n = S.surf ? S.surf.N : [0, 0, 1];
+    if (n[2] < 0.3) return;                       // only on forward-facing surfaces
+    const ground = [
+      S.pos[0] - n[0] * BODY_H,
+      S.pos[1] - n[1] * BODY_H,
+      S.pos[2] - n[2] * BODY_H
+    ];
+    const p = proj(ground);
+    const ang = Math.atan2(S.F[1], S.F[0]);
+    ctx.save();
+    ctx.translate(p[0], p[1]);
+    ctx.rotate(ang);
+    const rx = SIZE * 1.55 * p[2];
+    const ry = SIZE * 1.15 * p[2];
+    const g = ctx.createRadialGradient(0, 0, 0, 0, 0, Math.max(rx, ry));
+    g.addColorStop(0, 'rgba(48,36,24,0.30)');
+    g.addColorStop(0.6, 'rgba(48,36,24,0.11)');
+    g.addColorStop(1, 'rgba(48,36,24,0)');
+    ctx.fillStyle = g;
+    ctx.beginPath();
+    ctx.ellipse(0, 0, rx, ry, 0, 0, TAU);
+    ctx.fill();
+    ctx.restore();
+  }
+
+  const landings = [];
+
+  function pushSegment(a, b, r, col, band) {
+    const pa = proj(a), pb = proj(b);
+    const wpx = Math.max(0.6, r * SIZE * (pa[2] + pb[2]) * 0.5 * 2);
+    const z = (a[2] + b[2]) * 0.5;
+    items.push({ z, type: 0, x1: pa[0], y1: pa[1], x2: pb[0], y2: pb[1], w: wpx, col });
+    if (band) {
+      const m1 = vlerp(a, b, 0.34), m2 = vlerp(a, b, 0.66);
+      const q1 = proj(m1), q2 = proj(m2);
+      items.push({ z: z + 0.02, type: 0, x1: q1[0], y1: q1[1], x2: q2[0], y2: q2[1], w: wpx * 1.02, col: band });
+    }
+  }
+
+  function pushDot(p, r, col) {
+    const s = proj(p);
+    items.push({ z: p[2] + 0.05, type: 1, x: s[0], y: s[1], r: Math.max(0.5, r * SIZE * s[2]), col });
+  }
+
+  function buildLegs() {
+    const stride = 0.30;
+    const legIndex = 0;
+
+    for (const leg of LEGS) {
+      const ph = (S.gaitPhase + leg.phase) % 1;
+      let strideOff, lift;
+
+      if (ph < 0.5) {                                  // stance — foot planted
+        const t = ph / 0.5;
+        strideOff = stride * (1 - 2 * t);
+        lift = 0;
+        if (!leg.wasStance) {
+          leg.wasStance = true;
+          // the foot has just landed — remember where, for the text highlight
+          landings.push(leg);
+        }
+      } else {                                         // swing — foot in the air
+        const t = (ph - 0.5) / 0.5;
+        strideOff = stride * (-1 + 2 * t);
+        lift = Math.sin(t * Math.PI) * 0.20;
+        leg.wasStance = false;
+      }
+
+      const foot = [leg.rest[0], -STAND + lift, leg.rest[2] + strideOff];
+      const hip = leg.hip;
+      const dir = leg.dir;
+
+      const mid = [
+        (hip[0] + foot[0]) * 0.5,
+        (hip[1] + foot[1]) * 0.5,
+        (hip[2] + foot[2]) * 0.5
+      ];
+      const knee = [
+        mid[0] + dir[0] * 0.12,
+        mid[1] + 0.55,
+        mid[2] + dir[2] * 0.12
+      ];
+
+      const J = [
+        hip,
+        vlerp(hip, knee, 0.42),
+        vlerp(hip, knee, 0.80),
+        knee,
+        vlerp(knee, foot, 0.26),
+        vlerp(knee, foot, 0.52),
+        vlerp(knee, foot, 0.78),
+        foot
+      ];
+
+      const w = J.map(toWorld);
+
+      for (let i = 0; i < 7; i++) {
+        pushSegment(w[i], w[i + 1], SEG_R[i], SEG_COL[i], SEG_BAND[i]);
+      }
+      for (let i = 0; i < 8; i++) {
+        pushDot(w[i], SEG_R[Math.min(i, 6)] * 1.15, i === 7 ? '#6b5330' : '#4a3524');
+      }
+
+      // a few stiff spines on femur and tibia
+      for (const si of [2, 4]) {
+        for (let k = 1; k <= 2; k++) {
+          const t = 0.30 * k + 0.12;
+          const base = vlerp(w[si], w[si + 1], t);
+          const tipW = [
+            base[0] + (S.R[0] * dir[0] * 0.13 + S.U[0] * 0.15) * SIZE,
+            base[1] + (S.R[1] * dir[0] * 0.13 + S.U[1] * 0.15) * SIZE,
+            base[2] + (S.R[2] * dir[0] * 0.13 + S.U[2] * 0.15) * SIZE
+          ];
+          const pa = proj(base), pb = proj(tipW);
+          items.push({
+            z: base[2] + 0.06, type: 0,
+            x1: pa[0], y1: pa[1], x2: pb[0], y2: pb[1],
+            w: Math.max(0.6, 0.018 * SIZE * pa[2] * 2), col: '#3a2a1c'
+          });
+        }
+      }
+    }
+  }
+
+  function buildBody() {
+    for (const m of MESHES) {
+      const pos = m.pos, wp = m.wp, sp = m.sp;
+      for (let i = 0; i < pos.length; i++) {
+        const w = toWorld(pos[i]);
+        wp[i] = w;
+        sp[i] = proj(w);
+      }
+      for (const f of m.faces) {
+        const n = f.n;
+        const nx = S.R[0] * n[0] + S.U[0] * n[1] + S.F[0] * n[2];
+        const ny = S.R[1] * n[0] + S.U[1] * n[1] + S.F[1] * n[2];
+        const nz = S.R[2] * n[0] + S.U[2] * n[1] + S.F[2] * n[2];
+        if (nz < -0.12) continue;                       // backface cull
+
+        const lit = 0.5 + 0.5 * (nx * LIGHT[0] + ny * LIGHT[1] + nz * LIGHT[2]);
+        const li = clamp(Math.round(lit * (LEVELS - 1)), 0, LEVELS - 1);
+
+        const a = sp[f.t[0]], b = sp[f.t[1]], c = sp[f.t[2]];
+        const wa = wp[f.t[0]], wb = wp[f.t[1]], wc = wp[f.t[2]];
+
+        items.push({
+          z: (wa[2] + wb[2] + wc[2]) / 3,
+          type: 2,
+          x1: a[0], y1: a[1], x2: b[0], y2: b[1], x3: c[0], y3: c[1],
+          col: f.cols[li]
+        });
+      }
+    }
+  }
+
+  function flush() {
+    items.sort((a, b) => a.z - b.z);
+    ctx.lineCap = 'round';
+    ctx.lineJoin = 'round';
+    for (let i = 0; i < items.length; i++) {
+      const it = items[i];
+      if (it.type === 0) {
+        ctx.strokeStyle = it.col;
+        ctx.lineWidth = it.w;
+        ctx.beginPath();
+        ctx.moveTo(it.x1, it.y1);
+        ctx.lineTo(it.x2, it.y2);
+        ctx.stroke();
+      } else if (it.type === 1) {
+        ctx.fillStyle = it.col;
+        ctx.beginPath();
+        ctx.arc(it.x, it.y, it.r, 0, TAU);
+        ctx.fill();
+      } else {
+        ctx.fillStyle = it.col;
+        ctx.beginPath();
+        ctx.moveTo(it.x1, it.y1);
+        ctx.lineTo(it.x2, it.y2);
+        ctx.lineTo(it.x3, it.y3);
+        ctx.closePath();
+        ctx.fill();
+      }
+    }
+  }
+
+  /* ------------------------------------------------------------------ *
+   * 9. text interaction
+   * ------------------------------------------------------------------ */
+  function lightAt(docX, docY) {
+    const x = docX - scrollX;
+    const y = docY - scrollY;
+    if (x < 0 || y < 0 || x > W || y > H) return;
+    const el = document.elementFromPoint(x, y);
+    if (!el) return;
+    const word = el.closest ? el.closest('.w') : null;
+    if (!word) return;
+    if (word._litTimer) clearTimeout(word._litTimer);
+    word.classList.add('lit');
+    word._litTimer = setTimeout(() => {
+      word.classList.remove('lit');
+      word._litTimer = null;
+    }, 820);
+  }
+
+  function processLandings() {
+    if (!landings.length) return;
+    for (const leg of landings) {
+      // approximate contact point: the foot, projected onto the surface
+      const p = toWorld([leg.rest[0], -STAND, leg.rest[2]]);
+      lightAt(p[0], p[1]);
+    }
+    landings.length = 0;
+  }
+
+  function render() {
+    ctx.clearRect(0, 0, W, H);
+    if (!S.surf) return;
+
+    items.length = 0;
+    landings.length = 0;
+
+    drawShadow();
+    buildBody();
+    buildLegs();
+    flush();
+
+    processLandings();
+  }
+
+  /* ------------------------------------------------------------------ *
+   * 10. document analysis
+   * ------------------------------------------------------------------ */
+  function wrapWords(root) {
+    const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT, null);
+    const nodes = [];
+    while (walker.nextNode()) nodes.push(walker.currentNode);
+
+    for (const node of nodes) {
+      const text = node.nodeValue;
+      if (!text || !text.trim()) continue;
+      const parent = node.parentElement;
+      if (!parent) continue;
+      if (parent.closest('script,style,pre,code')) continue;
+
+      const parts = text.split(/(\s+)/);
+      const frag = document.createDocumentFragment();
+      for (const part of parts) {
+        if (!part) continue;
+        if (/^\s+$/.test(part)) {
+          frag.appendChild(document.createTextNode(part));
+        } else {
+          const span = document.createElement('span');
+          span.className = 'w';
+          span.textContent = part;
+          frag.appendChild(span);
+        }
+      }
+      node.parentNode.replaceChild(frag, node);
+    }
+  }
+
+  function buildLines() {
+    readScroll();
+    LINES = [];
+    const content = document.getElementById('content');
+    if (!content) return;
+
+    const blocks = content.querySelectorAll('p, h1, h2, h3, li');
+    const range = document.createRange();
+
+    for (const b of blocks) {
+      range.selectNodeContents(b);
+      const rects = range.getClientRects();
+      for (let i = 0; i < rects.length; i++) {
+        const r = rects[i];
+        if (r.width < 70 || r.height < 8) continue;
+        LINES.push({
+          x0: r.left + scrollX,
+          y0: r.top + scrollY,
+          x1: r.right + scrollX,
+          y1: r.bottom + scrollY
+        });
+      }
+    }
+  }
+
+  /* ------------------------------------------------------------------ *
+   * 11. boot + loop
+   * ------------------------------------------------------------------ */
+  let last = performance.now();
+  let running = false;
+
+  function frame(now) {
+    let dt = (now - last) / 1000;
+    last = now;
+    if (dt > 0.06) dt = 0.06;
+    update(dt);
+    render();
+    requestAnimationFrame(frame);
+  }
+
+  function boot() {
+    resizeCanvas();
+    readScroll();
+    wrapWords(document.getElementById('content'));
+    buildLines();
+    buildBody();
+    initSpider();
+    if (!running) {
+      running = true;
+      last = performance.now();
+      requestAnimationFrame(frame);
+    }
+  }
+
+  window.addEventListener('resize', () => {
+    resizeCanvas();
+    buildLines();
+  }, { passive: true });
+
+  window.addEventListener('scroll', () => {
+    readScroll();
+    // keep the creature in view if the reader scrolls far away
+    const visTop = scrollY - 200;
+    const visBot = scrollY + H + 200;
+    if (S.pos[1] < visTop || S.pos[1] > visBot) {
+      const target = pickSurface();
+      if (target) beginTravel(target);
+    }
+  }, { passive: true });
+
+  if (document.fonts && document.fonts.ready) {
+    document.fonts.ready.then(() => { buildLines(); }).catch(() => {});
+  }
+
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', boot);
+  } else {
+    boot();
+  }
+})();
+</script>
+</body>
+</html>

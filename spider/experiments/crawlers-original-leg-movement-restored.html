@@ -1,0 +1,757 @@
+<!DOCTYPE html>
+<html lang="en" class="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Crawlers — Slava Rybin</title>
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Tone.js for Sonic Synthesizer Feedback -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/tone/14.8.49/Tone.js"></script>
+    <script>
+        tailwind.config = {
+            darkMode: 'class',
+            theme: {
+                extend: {
+                    colors: {
+                        obsidian: '#050505',
+                        darkpanel: '#0c0d10',
+                        darkborder: '#1a1d24',
+                        crawlerYellow: '#d8f020',
+                    },
+                    fontFamily: {
+                        mono: ['JetBrains Mono', 'Courier New', 'monospace'],
+                        sans: ['Inter', 'sans-serif'],
+                    }
+                }
+            }
+        }
+    </script>
+    <!-- FontAwesome & Google Fonts -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@300;400;500;700&display=swap" rel="stylesheet">
+    <style>
+        body {
+            background-color: #08080a;
+            color: #d1d5db;
+            font-family: 'Inter', sans-serif;
+            overflow-x: hidden;
+            user-select: none;
+        }
+        canvas {
+            display: block;
+            touch-action: none;
+        }
+        /* Grid background pattern */
+        .bg-grid {
+            background-size: 50px 50px;
+            background-image: 
+                linear-gradient(to right, rgba(255, 255, 255, 0.02) 1px, transparent 1px),
+                linear-gradient(to bottom, rgba(255, 255, 255, 0.02) 1px, transparent 1px);
+        }
+        /* Custom scrollbar */
+        ::-webkit-scrollbar {
+            width: 6px;
+        }
+        ::-webkit-scrollbar-track {
+            background: #08080a;
+        }
+        ::-webkit-scrollbar-thumb {
+            background: #1f242d;
+            border-radius: 3px;
+        }
+        ::-webkit-scrollbar-thumb:hover {
+            background: #00f0ff;
+        }
+        .glow-box {
+            box-shadow: 0 0 20px rgba(0, 240, 255, 0.15);
+        }
+    </style>
+</head>
+<body class="relative min-h-screen bg-grid flex flex-col">
+
+    <!-- Background Dynamic Canvas for Kinetic Creature -->
+    <div class="fixed inset-0 z-0 pointer-events-auto">
+        <canvas id="crawler-canvas" class="w-full h-full cursor-crosshair"></canvas>
+    </div>
+
+    <!-- UI Overlay Navigation & Control Header -->
+    <header class="relative z-10 p-4 lg:p-6 flex flex-wrap items-center justify-between gap-4 pointer-events-auto">
+        <div class="flex items-center space-x-4 backdrop-blur-md bg-darkpanel/90 p-3 rounded-2xl border border-darkborder">
+            <div class="w-8 h-8 rounded-lg bg-yellow-400/10 border border-yellow-400/40 flex items-center justify-center text-yellow-300 font-mono text-sm font-bold">
+                <i class="fa-solid fa-spider"></i>
+            </div>
+            <div>
+                <h1 class="text-sm font-bold tracking-wider text-white font-mono">CRAWLERS</h1>
+                <div class="flex items-center space-x-2 text-[11px] font-mono text-gray-400">
+                    <span id="status-dot" class="w-2.5 h-2.5 rounded-full bg-yellow-400/50"></span>
+                    <span id="status-text">Prey Tracked / Resting</span>
+                </div>
+            </div>
+        </div>
+
+        <!-- Action Buttons -->
+        <div class="flex items-center space-x-3">
+            <button onclick="togglePause()" id="pause-btn" class="px-3 py-2 bg-darkpanel/90 border border-darkborder rounded-xl text-xs font-mono text-yellow-300 flex items-center space-x-2 transition hover:bg-white/5">
+                <i class="fa-solid fa-pause" id="pause-icon"></i>
+                <span id="pause-label">Pause</span>
+            </button>
+            <button onclick="toggleAudio()" id="audio-btn" class="px-3 py-2 bg-darkpanel/90 border border-darkborder rounded-xl text-xs font-mono text-yellow-300 flex items-center space-x-2 transition hover:bg-white/5">
+                <i class="fa-solid fa-volume-high" id="audio-icon"></i>
+                <span id="audio-label">Sonic Synth: ON</span>
+            </button>
+            <button onclick="toggleLegPanel()" class="px-3 py-2 bg-darkpanel/90 border border-darkborder rounded-xl text-xs font-mono text-yellow-300 flex items-center space-x-2 transition hover:bg-white/5">
+                <i class="fa-solid fa-code-branch"></i>
+                <span>Autotomy / Legs</span>
+            </button>
+            <button onclick="toggleInfoModal()" class="px-4 py-2 bg-yellow-400/10 hover:bg-yellow-400/20 border border-yellow-400/40 rounded-xl text-xs font-mono text-yellow-300 font-bold flex items-center space-x-2 transition">
+                <i class="fa-solid fa-circle-info"></i>
+                <span>About & Guide</span>
+            </button>
+        </div>
+    </header>
+
+    <!-- Leg Autotomy Toggle Bar -->
+    <div id="leg-panel" class="relative z-10 mx-4 lg:mx-6 mb-2 p-3 backdrop-blur-md bg-darkpanel/90 border border-darkborder rounded-2xl flex flex-wrap items-center justify-between gap-2 text-xs font-mono hidden pointer-events-auto">
+        <span class="text-gray-400 flex items-center gap-1.5"><i class="fa-solid fa-scissors text-yellow-300"></i> Autotomy Leg Toggles (Click to shed/restore limb):</span>
+        <div id="leg-buttons" class="flex flex-wrap gap-1.5"></div>
+    </div>
+
+    <!-- Project Description & Bookmarklet Modal -->
+    <div id="info-modal" class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-md hidden pointer-events-auto overflow-y-auto">
+        <div class="bg-darkpanel border border-darkborder w-full max-w-3xl rounded-3xl p-6 md:p-8 space-y-6 shadow-2xl my-8">
+            <div class="flex items-center justify-between border-b border-darkborder pb-4">
+                <div>
+                    <h2 class="text-base md:text-lg font-bold text-white font-mono tracking-tight">Digital creature living in your browser</h2>
+                    <p class="text-xs text-yellow-300 font-mono">Crawlers by Slava Rybin</p>
+                </div>
+                <button onclick="toggleInfoModal()" class="text-gray-400 hover:text-white transition">
+                    <i class="fa-solid fa-xmark text-lg"></i>
+                </button>
+            </div>
+
+            <!-- Concept Text -->
+            <div class="space-y-4 text-xs md:text-sm text-gray-300 leading-relaxed font-sans">
+                <p>
+                    <strong>Crawlers</strong> is a kinematic, interactive work with feedback loops on multiple levels. Its motion system is a mix of algorithmic and nature-inspired distributed models, inviting viewers to become curious about the underlying mechanisms. The look is similarly balanced: the point, square, and circle combine rigid technical expression with dynamic, lifelike movement.
+                </p>
+                <p>
+                    The page interaction is an attempt to blur the boundaries between the artwork and the viewer, while also reflecting on the timely topics of web crawlers, bots, and data collection. The page generation introduces a simple generative system, a boiled-down LLM predictor, offering a chance to feel what machine learning is at its core.
+                </p>
+                <p class="italic text-gray-400">
+                    In the AI agent era, we often find ourselves personifying probabilistic algorithms. The work encourages reflection on this and deeper thought about what is alive, what is not, and what we are. How are we different from the machine?
+                </p>
+                <p>
+                    Each artwork takes the form of a unique digital creature inspired by the anatomy and movement of spiders, centipedes, and other crawling organisms. These creatures inhabit an interactive website modeled after the familiar structure of Wikipedia, a space traditionally associated with the organization and accumulation of human knowledge. Released from its enclosure, each crawler begins exploring the page, responding to words, images, and hyperlinks as the viewer guides its movement through the browser. Some move slowly and methodically, others race across the screen. Some connect words through intricate webs of relationships, while others scatter paragraphs into fragmented arrangements. Their movements also produce sound, turning the act of gathering information into an improvised musical performance. Each crawler has its own visual and sonic behavior, making the website both an ecosystem and an instrument.
+                </p>
+                <p>
+                    As the creatures explore, the information they encounter becomes material for generating new content, which accumulates beneath the original page. Scrolling reveals further text to be explored, processed, and transformed, creating a potentially endless cycle in which information produces more information. The distinction between reading and writing begins to dissolve. What initially appears to be an encyclopedia gradually becomes an unstable, self-generating archive, where knowledge is no longer simply preserved but continually reorganized and expanded through computational processes.
+                </p>
+            </div>
+
+            <!-- How to Interact Instructions -->
+            <div class="border-t border-darkborder pt-4 space-y-4 font-mono text-xs">
+                <h3 class="text-sm font-bold text-white flex items-center space-x-2">
+                    <i class="fa-solid fa-compass text-yellow-300"></i>
+                    <span>How to Interact with Your Crawler</span>
+                </h3>
+
+                <div class="space-y-4 bg-obsidian p-5 rounded-2xl border border-darkborder text-gray-300">
+                    <div>
+                        <span class="text-yellow-300 font-bold block mb-1">1. Wake up your crawler</span>
+                        <p class="text-gray-400">Open your NFT to find your crawler sleeping on its generated webpage. Interact to wake it up and guide its movement.</p>
+                    </div>
+
+                    <div>
+                        <span class="text-yellow-300 font-bold block mb-1">2. Take your crawler for a walk</span>
+                        <p class="text-gray-400">Save your crawler as a browser bookmark to explore other websites.</p>
+                        
+                        <div class="my-3 p-3 bg-darkpanel rounded-xl border border-darkborder space-y-2">
+                            <p class="text-white font-semibold">Easy way:</p>
+                            <p class="text-gray-400">Drag the Bookmark button below directly to your browser's bookmarks bar.</p>
+                            
+                            <div class="py-2 flex items-center gap-3">
+                                <a id="bookmarklet-btn" href="javascript:(function(){const s=document.createElement('script');s.src='https://cdn.jsdelivr.net/gh/slavarybin/crawler-inject/crawler.js';document.body.appendChild(s);})();" 
+                                   onclick="event.preventDefault(); copyBookmarkletCode();" 
+                                   class="px-5 py-2.5 bg-yellow-300 text-black font-extrabold rounded-xl shadow-lg hover:bg-yellow-400 transition flex items-center space-x-2 cursor-grab active:cursor-grabbing">
+                                    <i class="fa-solid fa-bookmark"></i>
+                                    <span>Drag to Bookmarks Bar: [ 🕷️ Crawler ]</span>
+                                </a>
+                            </div>
+
+                            <p class="text-white font-semibold pt-2">Alternative method:</p>
+                            <ol class="list-decimal list-inside text-gray-400 space-y-1">
+                                <li>Bookmark the current page.</li>
+                                <li>Click the Bookmark button above to copy the special code.</li>
+                                <li>Edit your new bookmark settings.</li>
+                                <li>Replace its URL with the copied code and save.</li>
+                            </ol>
+                        </div>
+                    </div>
+
+                    <div>
+                        <span class="text-yellow-300 font-bold block mb-1">3. Explore the web together</span>
+                        <p class="text-gray-400">Visit any website and click your crawler bookmark. Your crawler will appear from offscreen and start interacting with the page!</p>
+                    </div>
+
+                    <div class="p-3 bg-yellow-300/10 border border-yellow-300/30 rounded-xl text-yellow-200/90 text-[11px]">
+                        <strong>Note:</strong> This is an experimental experience. Loading may take a few moments, and some websites aren't fully compatible yet. Wikipedia is a great place to start!
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Notification Toast -->
+    <div id="toast" class="fixed bottom-6 right-6 z-50 backdrop-blur-md bg-darkpanel border border-yellow-300 text-yellow-300 px-5 py-3 rounded-2xl text-xs font-mono shadow-2xl transform translate-y-24 opacity-0 transition-all duration-300 flex items-center space-x-2">
+        <i class="fa-solid fa-check"></i>
+        <span id="toast-msg">Bookmarklet code copied!</span>
+    </div>
+
+    <!-- Exact Kinetic Crawler Engine Script -->
+    <script>
+        const canvas = document.getElementById('crawler-canvas');
+        const ctx = canvas.getContext('2d');
+
+        let width, height;
+        function resize() {
+            width = canvas.width = window.innerWidth;
+            height = canvas.height = window.innerHeight;
+        }
+        window.addEventListener('resize', resize);
+        resize();
+
+        const CRAWLER_COLOR = '#dfff00';
+        const TARGET_CIRCLE_COLOR = 'rgba(255, 255, 255, 0.35)';
+
+        // Reactive Web Grid Ripples Array
+        let ripples = [];
+
+        function addRipple(x, y, force = 1.0) {
+            ripples.push({ x, y, radius: 2, maxRadius: 40 * force, alpha: 0.6 * force });
+            if (ripples.length > 20) ripples.shift();
+        }
+
+        function drawReactiveGrid() {
+            const gridSize = 50;
+            ctx.save();
+            ctx.strokeStyle = 'rgba(255, 255, 255, 0.025)';
+            ctx.lineWidth = 1;
+
+            for (let x = 0; x < width; x += gridSize) {
+                ctx.beginPath();
+                ctx.moveTo(x, 0);
+                ctx.lineTo(x, height);
+                ctx.stroke();
+            }
+            for (let y = 0; y < height; y += gridSize) {
+                ctx.beginPath();
+                ctx.moveTo(0, y);
+                ctx.lineTo(width, y);
+                ctx.stroke();
+            }
+
+            for (let i = ripples.length - 1; i >= 0; i--) {
+                const r = ripples[i];
+                r.radius += 1.2;
+                r.alpha -= 0.015;
+
+                if (r.alpha <= 0) {
+                    ripples.splice(i, 1);
+                    continue;
+                }
+
+                ctx.strokeStyle = `rgba(223, 255, 0, ${r.alpha})`;
+                ctx.lineWidth = 1.5;
+                ctx.beginPath();
+                ctx.arc(r.x, r.y, r.radius, 0, Math.PI * 2);
+                ctx.stroke();
+            }
+            ctx.restore();
+        }
+
+        // Web Audio Synthesizer Setup
+        let audioEnabled = true;
+        let isPaused = false;
+        const synth = new Tone.PolySynth(Tone.Synth, {
+            oscillator: { type: 'sine' },
+            envelope: { attack: 0.005, decay: 0.08, sustain: 0, release: 0.06 }
+        }).toDestination();
+        synth.volume.value = -22;
+
+        const pentatonicScale = ['C4', 'D4', 'E4', 'G4', 'A4', 'C5', 'D5', 'E5'];
+
+        function playStepSound() {
+            if (!audioEnabled || isPaused) return;
+            try {
+                if (Tone.context.state !== 'running') {
+                    Tone.start();
+                }
+                const note = pentatonicScale[Math.floor(Math.random() * pentatonicScale.length)];
+                synth.triggerAttackRelease(note, "32n");
+            } catch(e) {}
+        }
+
+        function toggleAudio() {
+            audioEnabled = !audioEnabled;
+            document.getElementById('audio-label').textContent = audioEnabled ? 'Sonic Synth: ON' : 'Sonic Synth: OFF';
+            document.getElementById('audio-icon').className = audioEnabled ? 'fa-solid fa-volume-high' : 'fa-solid fa-volume-xmark';
+        }
+
+        function togglePause() {
+            isPaused = !isPaused;
+            document.getElementById('pause-label').textContent = isPaused ? 'Play' : 'Pause';
+            document.getElementById('pause-icon').className = isPaused ? 'fa-solid fa-play' : 'fa-solid fa-pause';
+        }
+
+        function toggleLegPanel() {
+            document.getElementById('leg-panel').classList.toggle('hidden');
+        }
+
+        let mouse = { x: window.innerWidth / 2 + 150, y: window.innerHeight / 2, lastX: 0, lastY: 0, idleTime: 0 };
+
+        window.addEventListener('mousemove', (e) => {
+            mouse.x = e.clientX;
+            mouse.y = e.clientY;
+            mouse.idleTime = 0;
+        });
+
+        window.addEventListener('pointerdown', (e) => {
+            mouse.x = e.clientX;
+            mouse.y = e.clientY;
+            mouse.idleTime = 0;
+            addRipple(mouse.x, mouse.y, 1.5);
+        });
+
+        // 8-LEG ANATOMICAL SPIDER LOCOMOTION ENGINE WITH FRONT-LEG STRETCHING & PULLING MECHANICS
+        class BiologicalSpiderCrawler {
+            constructor(x, y) {
+                this.x = x;
+                this.y = y;
+                this.angle = 0;
+                this.speed = 0;
+                this.stopThreshold = 45;
+                this.gaitPhase = 0;
+                this.idlePushCycle = 0;
+
+                // 7-segment lengths per leg
+                this.segmentLengths = {
+                    coxa: 9,
+                    trochanter: 6,
+                    femur: 32,
+                    patella: 14,
+                    tibia: 28,
+                    metatarsus: 24,
+                    tarsus: 14
+                };
+
+                this.legs = [];
+                this.initAnatomicalLegs();
+            }
+
+            initAnatomicalLegs() {
+                this.legs = [];
+                
+                const legConfigs = [
+                    { id: 'L1', label: 'L1 (Front)', side: -1, pair: 0, attachOffset: { x: 12, y: -6 }, baseAngle: -0.75, group: 'A', isFront: true },
+                    { id: 'R1', label: 'R1 (Front)', side: 1,  pair: 0, attachOffset: { x: 12, y: 6 },  baseAngle: 0.75,  group: 'B', isFront: true },
+                    { id: 'L2', label: 'L2 (Mid-F)', side: -1, pair: 1, attachOffset: { x: 4,  y: -8 }, baseAngle: -1.30, group: 'B', isFront: false },
+                    { id: 'R2', label: 'R2 (Mid-F)', side: 1,  pair: 1, attachOffset: { x: 4,  y: 8 },  baseAngle: 1.30,  group: 'A', isFront: false },
+                    { id: 'L3', label: 'L3 (Mid-R)', side: -1, pair: 2, attachOffset: { x: -4, y: -8 }, baseAngle: -1.85, group: 'A', isFront: false },
+                    { id: 'R3', label: 'R3 (Mid-R)', side: 1,  pair: 2, attachOffset: { x: -4, y: 8 },  baseAngle: 1.85,  group: 'B', isFront: false },
+                    { id: 'L4', label: 'L4 (Hind)',  side: -1, pair: 3, attachOffset: { x: -12, y: -6 }, baseAngle: -2.40, group: 'B', isFront: false },
+                    { id: 'R4', label: 'R4 (Hind)',  side: 1,  pair: 3, attachOffset: { x: -12, y: 6 },  baseAngle: 2.40,  group: 'A', isFront: false }
+                ];
+
+                legConfigs.forEach((cfg) => {
+                    const defaultReach = cfg.isFront ? 125 : 105;
+                    const defaultFootX = this.x + Math.cos(this.angle + cfg.baseAngle) * defaultReach;
+                    const defaultFootY = this.y + Math.sin(this.angle + cfg.baseAngle) * defaultReach;
+
+                    this.legs.push({
+                        id: cfg.id,
+                        label: cfg.label,
+                        side: cfg.side,
+                        pair: cfg.pair,
+                        group: cfg.group,
+                        attachOffset: cfg.attachOffset,
+                        baseAngle: cfg.baseAngle,
+                        isFront: cfg.isFront,
+                        active: true,
+                        
+                        // Foot Position Anchors
+                        plantedFoot: { x: defaultFootX, y: defaultFootY },
+                        currentFoot: { x: defaultFootX, y: defaultFootY },
+                        swingStartFoot: { x: defaultFootX, y: defaultFootY },
+                        targetFoot: { x: defaultFootX, y: defaultFootY },
+                        
+                        // State Machine
+                        phaseState: 'SUPPORT', // LIFT, STRETCH, TOUCH, PULL, RELEASE, SUPPORT
+                        isStance: true,
+                        swingProgress: 0,
+                        hydraulicExtension: 1.0,
+                        flexionAngle: 0.2
+                    });
+                });
+
+                this.renderLegControls();
+            }
+
+            renderLegControls() {
+                const container = document.getElementById('leg-buttons');
+                if (!container) return;
+                container.innerHTML = '';
+
+                this.legs.forEach((leg) => {
+                    const btn = document.createElement('button');
+                    btn.className = `px-2 py-1 rounded-md text-[11px] font-bold border ${leg.active ? 'bg-yellow-300/20 border-yellow-300 text-yellow-300' : 'bg-red-950/40 border-red-800 text-red-400 opacity-60'}`;
+                    btn.textContent = leg.id;
+                    btn.title = `${leg.label}: Click to ${leg.active ? 'autotomize' : 'restore'}`;
+                    btn.onclick = () => {
+                        leg.active = !leg.active;
+                        this.renderLegControls();
+                    };
+                    container.appendChild(btn);
+                });
+            }
+
+            update() {
+                if (isPaused) return;
+
+                const dx = mouse.x - this.x;
+                const dy = mouse.y - this.y;
+                const dist = Math.hypot(dx, dy);
+
+                mouse.idleTime += 0.016;
+
+                // --- 1. HEADING ORIENTATION ---
+                if (dist > 10) {
+                    const targetAngle = Math.atan2(dy, dx);
+                    let diff = targetAngle - this.angle;
+                    while (diff < -Math.PI) diff += Math.PI * 2;
+                    while (diff > Math.PI) diff -= Math.PI * 2;
+
+                    this.angle += diff * 0.075;
+                }
+
+                // --- 2. MOVEMENT SPEED & RUNNING MECHANICS ---
+                const isRunning = dist > 200;
+                if (dist > this.stopThreshold) {
+                    const targetSpeed = Math.min(isRunning ? 6.5 : 3.8, (dist - this.stopThreshold) * 0.045);
+                    this.speed += (targetSpeed - this.speed) * 0.12;
+                } else {
+                    this.speed *= 0.80;
+                    if (this.speed < 0.01) this.speed = 0;
+                }
+
+                // Advance Body
+                this.x += Math.cos(this.angle) * this.speed;
+                this.y += Math.sin(this.angle) * this.speed;
+
+                // --- 3. IDLE PUSHING MECHANICS ---
+                let pushOffset = 0;
+                if (this.speed === 0) {
+                    this.idlePushCycle += 0.04;
+                    pushOffset = Math.sin(this.idlePushCycle) * 3.5;
+
+                    if (Math.sin(this.idlePushCycle) > 0.98) {
+                        addRipple(this.x, this.y, 0.6);
+                    }
+                } else {
+                    this.idlePushCycle = 0;
+                }
+
+                // Update Header Status UI
+                const statusDot = document.getElementById('status-dot');
+                const statusText = document.getElementById('status-text');
+                if (statusDot && statusText) {
+                    if (this.speed > 0.1) {
+                        statusDot.className = "w-2.5 h-2.5 rounded-full bg-yellow-300 shadow-[0_0_10px_#dfff00] animate-pulse";
+                        statusText.textContent = isRunning ? "Fast Running & Front-Leg Pulling" : "Slow Walking & Front-Leg Reaching";
+                    } else {
+                        statusDot.className = "w-2.5 h-2.5 rounded-full bg-yellow-400/80 animate-ping";
+                        statusText.textContent = "Idle Ground Pushing / Sensing";
+                    }
+                }
+
+                // --- 4. GAIT & FRONT-LEG PHASE MECHANICS ---
+                if (this.speed > 0.05) {
+                    const gaitStep = isRunning ? 0.038 : 0.024;
+                    this.gaitPhase += gaitStep + (this.speed * 0.005);
+                    if (this.gaitPhase >= 1.0) this.gaitPhase -= 1.0;
+                }
+
+                const cos = Math.cos(this.angle);
+                const sin = Math.sin(this.angle);
+
+                this.legs.forEach((leg) => {
+                    if (!leg.active) return;
+
+                    const coxaWorldX = this.x + (leg.attachOffset.x * cos - leg.attachOffset.y * sin);
+                    const coxaWorldY = this.y + (leg.attachOffset.x * sin + leg.attachOffset.y * cos);
+
+                    // Reaching & Pulling Distances
+                    const reachDistance = leg.isFront 
+                        ? (isRunning ? 140 : 120) + pushOffset 
+                        : 100 + pushOffset;
+
+                    const idealAngle = this.angle + leg.baseAngle;
+
+                    // Forward Lead Vector
+                    const strideMultiplier = leg.isFront ? (isRunning ? 1.6 : 1.3) : (leg.pair === 3 ? 0.8 : 1.0);
+                    const leadX = Math.cos(this.angle) * (this.speed * 8 * strideMultiplier);
+                    const leadY = Math.sin(this.angle) * (this.speed * 8 * strideMultiplier);
+
+                    const idealFootX = coxaWorldX + Math.cos(idealAngle) * reachDistance + leadX;
+                    const idealFootY = coxaWorldY + Math.sin(idealAngle) * reachDistance + leadY;
+
+                    let phase = leg.group === 'A' ? this.gaitPhase : (this.gaitPhase + 0.5) % 1.0;
+
+                    // Stance vs Swing Split (65% Stance / 35% Swing)
+                    if (phase < 0.65 || this.speed <= 0.05) {
+                        // STANCE PHASE: Foot Planted & Pulling Body
+                        leg.isStance = true;
+                        leg.phaseState = leg.isFront ? 'PULL' : 'SUPPORT';
+                        leg.swingProgress = 0;
+
+                        // Lock Foot to World Space (No Sliding)
+                        leg.currentFoot.x = leg.plantedFoot.x;
+                        leg.currentFoot.y = leg.plantedFoot.y;
+
+                        // Joint Flexion during Pulling Action
+                        const pullDist = Math.hypot(coxaWorldX - leg.plantedFoot.x, coxaWorldY - leg.plantedFoot.y);
+                        leg.flexionAngle = Math.max(0.1, 0.45 - (pullDist / 200));
+
+                        const distToIdeal = Math.hypot(idealFootX - leg.plantedFoot.x, idealFootY - leg.plantedFoot.y);
+                        const maxThreshold = leg.isFront ? 60 : 48;
+
+                        if (distToIdeal > maxThreshold && this.speed > 0.1) {
+                            leg.plantedFoot.x = idealFootX;
+                            leg.plantedFoot.y = idealFootY;
+                            addRipple(idealFootX, idealFootY, leg.isFront ? 0.6 : 0.4);
+                            playStepSound();
+                        }
+                    } else {
+                        // SWING PHASE: Lift, Stretch, Reach & Touchdown
+                        if (leg.isStance) {
+                            leg.isStance = false;
+                            leg.phaseState = 'LIFT';
+                            leg.swingStartFoot.x = leg.currentFoot.x;
+                            leg.swingStartFoot.y = leg.currentFoot.y;
+                            leg.targetFoot.x = idealFootX;
+                            leg.targetFoot.y = idealFootY;
+                            playStepSound();
+                        }
+
+                        leg.swingProgress = (phase - 0.65) / 0.35;
+                        const t = leg.swingProgress;
+
+                        if (t < 0.25) {
+                            leg.phaseState = 'LIFT';
+                        } else if (t < 0.80) {
+                            leg.phaseState = 'STRETCH';
+                        } else {
+                            leg.phaseState = 'TOUCH';
+                        }
+
+                        // Smooth Non-Glitching Cubic Trajectory
+                        const smoothT = t < 0.5 ? 2 * t * t : 1 - Math.pow(-2 * t + 2, 2) / 2;
+
+                        leg.currentFoot.x = leg.swingStartFoot.x + (leg.targetFoot.x - leg.swingStartFoot.x) * smoothT;
+                        leg.currentFoot.y = leg.swingStartFoot.y + (leg.targetFoot.y - leg.swingStartFoot.y) * smoothT;
+
+                        // Hydraulic Pressure Surge during Extension
+                        leg.hydraulicExtension = 1.0 + Math.sin(t * Math.PI) * (leg.isFront ? 0.45 : 0.30);
+
+                        if (t >= 0.96) {
+                            leg.plantedFoot.x = leg.targetFoot.x;
+                            leg.plantedFoot.y = leg.targetFoot.y;
+                            addRipple(leg.targetFoot.x, leg.targetFoot.y, leg.isFront ? 0.6 : 0.4);
+                        }
+                    }
+                });
+            }
+
+            draw() {
+                ctx.save();
+                const cos = Math.cos(this.angle);
+                const sin = Math.sin(this.angle);
+
+                // --- 1. RENDER 8 ANATOMICAL LEGS (Glitch-Free IK) ---
+                this.legs.forEach((leg) => {
+                    if (!leg.active) return;
+
+                    const p1 = {
+                        x: this.x + (leg.attachOffset.x * cos - leg.attachOffset.y * sin),
+                        y: this.y + (leg.attachOffset.x * sin + leg.attachOffset.y * cos)
+                    };
+
+                    const foot = leg.currentFoot;
+
+                    const L_coxa = this.segmentLengths.coxa;
+                    const L_troch = this.segmentLengths.trochanter;
+                    const L_femur = this.segmentLengths.femur * leg.hydraulicExtension;
+                    const L_patella = this.segmentLengths.patella;
+                    const L_tibia = this.segmentLengths.tibia;
+                    const L_meta = this.segmentLengths.metatarsus;
+                    const L_tarsus = this.segmentLengths.tarsus;
+
+                    const baseAngle = Math.atan2(foot.y - p1.y, foot.x - p1.x);
+
+                    const p2 = {
+                        x: p1.x + Math.cos(baseAngle) * L_coxa,
+                        y: p1.y + Math.sin(baseAngle) * L_coxa
+                    };
+
+                    const p3 = {
+                        x: p2.x + Math.cos(baseAngle + leg.side * 0.12) * L_troch,
+                        y: p2.y + Math.sin(baseAngle + leg.side * 0.12) * L_troch
+                    };
+
+                    const dx = foot.x - p3.x;
+                    const dy = foot.y - p3.y;
+                    const directDist = Math.hypot(dx, dy) || 1;
+
+                    const normalX = -dy / directDist;
+                    const normalY = dx / directDist;
+
+                    const maxReach = L_femur + L_patella + L_tibia + L_meta + L_tarsus;
+                    const bendAmount = leg.side * Math.min(36, Math.max(6, (maxReach - directDist) * 0.42));
+
+                    const p4 = {
+                        x: p3.x + dx * 0.32 + normalX * bendAmount,
+                        y: p3.y + dy * 0.32 + normalY * bendAmount
+                    };
+
+                    const p5 = {
+                        x: p4.x + dx * 0.22 + normalX * (bendAmount * 0.5),
+                        y: p4.y + dy * 0.22 + normalY * (bendAmount * 0.5)
+                    };
+
+                    const p6 = {
+                        x: p5.x + dx * 0.26 - normalX * (bendAmount * 0.25),
+                        y: p5.y + dy * 0.26 - normalY * (bendAmount * 0.25)
+                    };
+
+                    const p7 = { x: foot.x, y: foot.y };
+
+                    // Render Clean Lines
+                    ctx.strokeStyle = CRAWLER_COLOR;
+                    ctx.lineWidth = leg.isFront ? (leg.isStance ? 2.0 : 1.5) : (leg.isStance ? 1.6 : 1.2);
+                    ctx.beginPath();
+                    ctx.moveTo(p1.x, p1.y);
+                    ctx.lineTo(p2.x, p2.y);
+                    ctx.lineTo(p3.x, p3.y);
+                    ctx.lineTo(p4.x, p4.y);
+                    ctx.lineTo(p5.x, p5.y);
+                    ctx.lineTo(p6.x, p6.y);
+                    ctx.lineTo(p7.x, p7.y);
+                    ctx.stroke();
+
+                    // Render Joints
+                    this.drawNodeDot(p1.x, p1.y, 2.0);
+                    this.drawNodeDot(p2.x, p2.y, 2.0);
+                    this.drawNodeDot(p3.x, p3.y, 2.4);
+                    this.drawNodeDot(p4.x, p4.y, leg.isFront ? 3.6 : 3.0); // Knee
+                    this.drawNodeDot(p5.x, p5.y, 2.4);
+                    this.drawNodeDot(p6.x, p6.y, 2.0);
+                    this.drawNodeDot(p7.x, p7.y, leg.isFront ? 3.6 : 3.0); // Foot
+                });
+
+                // --- 2. RENDER SPIDER BODY ---
+                ctx.translate(this.x, this.y);
+                ctx.rotate(this.angle);
+
+                ctx.strokeStyle = CRAWLER_COLOR;
+                ctx.lineWidth = 1.5;
+                ctx.fillStyle = '#08080a';
+
+                // Pedipalps
+                ctx.beginPath();
+                ctx.moveTo(12, -3); ctx.lineTo(21, -7); ctx.lineTo(25, -5);
+                ctx.moveTo(12, 3);  ctx.lineTo(21, 7);  ctx.lineTo(25, 5);
+                ctx.stroke();
+                this.drawNodeDot(25, -5, 2.0);
+                this.drawNodeDot(25, 5, 2.0);
+
+                // Eyes
+                this.drawNodeDot(12, -2.5, 1.5);
+                this.drawNodeDot(12, 2.5, 1.5);
+                this.drawNodeDot(14, -1.2, 1.2);
+                this.drawNodeDot(14, 1.2, 1.2);
+
+                // Cephalothorax
+                ctx.beginPath();
+                ctx.ellipse(2, 0, 11, 7.5, 0, 0, Math.PI * 2);
+                ctx.fill();
+                ctx.stroke();
+
+                // Abdomen
+                ctx.beginPath();
+                ctx.ellipse(-20, 0, 16, 9.5, 0, 0, Math.PI * 2);
+                ctx.fill();
+                ctx.stroke();
+
+                ctx.restore();
+            }
+
+            drawNodeDot(x, y, radius) {
+                ctx.fillStyle = CRAWLER_COLOR;
+                ctx.beginPath();
+                ctx.arc(x, y, radius, 0, Math.PI * 2);
+                ctx.fill();
+            }
+        }
+
+        // Instantiation & Main Loop
+        const crawler = new BiologicalSpiderCrawler(window.innerWidth / 2, window.innerHeight / 2);
+
+        function animate() {
+            ctx.clearRect(0, 0, width, height);
+
+            drawReactiveGrid();
+
+            // Target Cursor Circle
+            ctx.save();
+            ctx.strokeStyle = TARGET_CIRCLE_COLOR;
+            ctx.lineWidth = 1.2;
+            ctx.beginPath();
+            ctx.arc(mouse.x, mouse.y, 30, 0, Math.PI * 2);
+            ctx.stroke();
+            ctx.restore();
+
+            crawler.update();
+            crawler.draw();
+
+            requestAnimationFrame(animate);
+        }
+
+        animate();
+
+        function toggleInfoModal() {
+            document.getElementById('info-modal').classList.toggle('hidden');
+        }
+
+        function copyBookmarkletCode() {
+            const code = `javascript:(function(){const s=document.createElement('script');s.src='https://cdn.jsdelivr.net/gh/slavarybin/crawler-inject/crawler.js';document.body.appendChild(s);})();`;
+            const el = document.createElement('textarea');
+            el.value = code;
+            document.body.appendChild(el);
+            el.select();
+            document.execCommand('copy');
+            document.body.removeChild(el);
+
+            showToast("Bookmarklet code copied to clipboard!");
+        }
+
+        function showToast(msg) {
+            const toast = document.getElementById('toast');
+            document.getElementById('toast-msg').textContent = msg;
+            toast.classList.remove('translate-y-24', 'opacity-0');
+            setTimeout(() => {
+                toast.classList.add('translate-y-24', 'opacity-0');
+            }, 3000);
+        }
+    </script>
+</body>
+</html>

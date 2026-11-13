@@ -1,0 +1,420 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Orb Web — Wind and Wall Anchors</title>
+<style>
+  :root { color-scheme: dark; --bg:#080b10; }
+  * { box-sizing:border-box; }
+  html, body { margin:0; width:100%; height:100%; overflow:hidden; background:var(--bg); }
+  canvas { display:block; width:100vw; height:100vh; }
+</style>
+</head>
+<body>
+<canvas id="web" aria-label="A delicate orb web being constructed and moved by the wind"></canvas>
+<script>
+(() => {
+  'use strict';
+  const canvas = document.getElementById('web');
+  const ctx = canvas.getContext('2d', { alpha:false });
+  let width=0, height=0, dpr=1, geometry=null, startTime=performance.now();
+  let lastFrame=startTime, wind=0, gust=0, gustTarget=0, nextGust=0;
+
+  const TAU=Math.PI*2;
+  const clamp=(v,a=0,b=1)=>Math.max(a,Math.min(b,v));
+  const lerp=(a,b,t)=>a+(b-a)*t;
+  const smooth=t=>{t=clamp(t);return t*t*(3-2*t);};
+  const easeOut=t=>1-Math.pow(1-clamp(t),3);
+  const pt=(x,y)=>({x,y});
+  let seed=0x6d2b79f5;
+  function rand(){ seed^=seed<<13; seed^=seed>>>17; seed^=seed<<5; return (seed>>>0)/4294967296; }
+  function randRange(a,b){return a+(b-a)*rand();}
+
+  function resize(){
+    dpr=Math.min(window.devicePixelRatio||1,2);
+    width=window.innerWidth; height=window.innerHeight;
+    canvas.width=Math.round(width*dpr); canvas.height=Math.round(height*dpr);
+    ctx.setTransform(dpr,0,0,dpr,0,0);
+    geometry=makeGeometry();
+  }
+
+  function edgePoint(side,t){
+    if(side==='top') return pt(width*t,0);
+    if(side==='right') return pt(width,height*t);
+    if(side==='bottom') return pt(width*(1-t),height);
+    return pt(0,height*(1-t));
+  }
+  function randomWallPoint(excludeSide){
+    const choices=['top','right','bottom','left'].filter(s=>s!==excludeSide);
+    const side=choices[Math.floor(rand()*choices.length)];
+    const margin=randRange(.08,.92);
+    return {side, point:edgePoint(side,margin)};
+  }
+  function rayToWall(cx,cy,angle){
+    const dx=Math.cos(angle),dy=Math.sin(angle);
+    const candidates=[];
+    if(dx>1e-6)candidates.push((width-cx)/dx);
+    if(dx< -1e-6)candidates.push((0-cx)/dx);
+    if(dy>1e-6)candidates.push((height-cy)/dy);
+    if(dy< -1e-6)candidates.push((0-cy)/dy);
+    const t=Math.min(...candidates.filter(v=>v>0));
+    return pt(clamp(cx+dx*t,0,width),clamp(cy+dy*t,0,height));
+  }
+  function makeGeometry(){
+    seed=0x6d2b79f5;
+    const margin=Math.min(width,height)*.075;
+    const cx=width*.5+randRange(-.025,.025)*width;
+    const cy=height*.51+randRange(-.025,.025)*height;
+    const hub=pt(clamp(cx,margin,width-margin),clamp(cy,margin,height-margin));
+    // A slightly taller-than-wide orb, scaled to fit narrow and wide screens.
+    const rx=Math.min(width*.39,height*.40);
+    const ry=Math.min(height*.465,width*.34);
+
+    // Four initial airborne bridge threads. Both ends ultimately adhere to literal viewport edges.
+    const bridgeStarts=[
+      {side:'left',t:randRange(.18,.36)},
+      {side:'top',t:randRange(.58,.83)},
+      {side:'right',t:randRange(.62,.83)},
+      {side:'bottom',t:randRange(.13,.38)}
+    ];
+    const bridges=bridgeStarts.map((s,i)=>{
+      const a=edgePoint(s.side,s.t);
+      const target=randomWallPoint(s.side);
+      return {a,b:target.point,phase:randRange(0,TAU),slack:randRange(16,36),seed:randRange(0,TAU),index:i};
+    });
+
+    // Irregular ray angles make the boundary attachment pattern organic rather than perfectly radial.
+    const count=22;
+    const angles=[];
+    for(let i=0;i<count;i++) angles.push(-Math.PI/2+i*TAU/count+randRange(-.052,.052));
+    angles.sort((a,b)=>a-b);
+    const anchors=angles.map((a,i)=>({p:rayToWall(hub.x,hub.y,a),angle:a,variation:randRange(.92,1.08),phase:randRange(0,TAU),i}));
+    const perimeterOrder=Array.from({length:count},(_,i)=>i);
+    const start=Math.floor(rand()*count);
+    const dir=rand()<.5?1:-1;
+    const ordered=[];
+    for(let i=0;i<count;i++) ordered.push((start+dir*i+count*2)%count);
+    const radiusOrder=Array.from({length:count},(_,i)=>i);
+    for(let i=radiusOrder.length-1;i>0;i--){const j=Math.floor(rand()*(i+1));[radiusOrder[i],radiusOrder[j]]=[radiusOrder[j],radiusOrder[i]];}
+    const spiralPhase=randRange(0,TAU);
+    const spokeAngles=anchors.map(v=>((v.angle%TAU)+TAU)%TAU).sort((a,b)=>a-b);
+    const topDrapes=[];
+    for(let i=0;i<6;i++){
+      const x1=width*(.08+i*.145+randRange(-.018,.018));
+      const x2=Math.min(width*.98,x1+width*randRange(.12,.19));
+      topDrapes.push({a:pt(x1,0),b:pt(x2,0),sag:randRange(22,58),phase:randRange(0,TAU)});
+    }
+    const outerCables=[];
+    for(let i=0;i<8;i++){
+      const anchor=anchors[(i*3+Math.floor(rand()*3))%anchors.length].p;
+      const side=['top','right','bottom','left'][i%4];
+      const end=edgePoint(side,randRange(.03,.97));
+      if(Math.hypot(end.x-anchor.x,end.y-anchor.y)>Math.min(width,height)*.22)
+        outerCables.push({a:anchor,b:end,phase:randRange(0,TAU),slack:randRange(6,15)});
+    }
+    return {hub,bridges,anchors,perimeterOrder:ordered,radiusOrder,spiralPhase,margin,rx,ry,spokeAngles,topDrapes,outerCables};
+  }
+
+  // Fine strands remain fixed at endpoints while their spans flex under changing wind.
+  function windAt(t,phase=0){
+    const base=Math.sin(t*.63+phase)*.5+Math.sin(t*.23+phase*1.7)*.28+Math.sin(t*1.17-phase*.8)*.12;
+    return (base+gust)*1.05;
+  }
+  function silkPoints(a,b,time,phase=0,slack=8,segments=64,windScale=1){
+    const dx=b.x-a.x,dy=b.y-a.y,len=Math.hypot(dx,dy)||1;
+    const nx=-dy/len,ny=dx/len;
+    const w=windAt(time,phase)*windScale;
+    const out=[];
+    for(let i=0;i<=segments;i++){
+      const u=i/segments;
+      const envelope=Math.sin(Math.PI*u);
+      const slow=Math.sin(u*TAU*1.15+time*.74+phase)*slack*.22;
+      const ripple=Math.sin(u*TAU*3.1-time*1.32+phase*1.4)*slack*.10;
+      const flutter=Math.sin(u*TAU*6.4+time*2.1+phase)*slack*.035;
+      const displacement=envelope*(w*slack+slow+ripple+flutter);
+      const gravity=envelope*slack*.17;
+      out.push(pt(a.x+dx*u+nx*displacement, a.y+dy*u+ny*displacement+gravity));
+    }
+    return out;
+  }
+  function strokePartial(points,progress,color,width,alpha=1,glow=0){
+    if(progress<=0||points.length<2)return;
+    const n=points.length-1, scaled=clamp(progress)*n, whole=Math.floor(scaled), frac=scaled-whole;
+    ctx.save();ctx.globalAlpha=alpha;ctx.strokeStyle=color;ctx.lineWidth=width;ctx.lineCap='round';ctx.lineJoin='round';
+    if(glow){ctx.shadowColor=color;ctx.shadowBlur=glow;}
+    ctx.beginPath();ctx.moveTo(points[0].x,points[0].y);
+    for(let i=1;i<=whole;i++)ctx.lineTo(points[i].x,points[i].y);
+    if(whole<n){const p=points[whole],q=points[whole+1];ctx.lineTo(lerp(p.x,q.x,frac),lerp(p.y,q.y,frac));}
+    ctx.stroke();ctx.restore();
+  }
+  function drawSilk(a,b,time,phase,slack=10,progress=1,kind='structural',alpha=1){
+    const pts=silkPoints(a,b,time,phase,slack,kind==='capture'?42:54,kind==='capture'?.72:1);
+    const color=kind==='capture'?'rgba(232,222,195,.84)':'rgba(224,237,246,.69)';
+    const lineWidth=kind==='capture'?.58:.68;
+    strokePartial(pts,progress,color,lineWidth,alpha,kind==='capture'?.8:.35);
+  }
+  function background(){
+    ctx.fillStyle='#080b10';ctx.fillRect(0,0,width,height);
+    const g=ctx.createRadialGradient(width*.5,height*.48,Math.min(width,height)*.04,width*.5,height*.48,Math.max(width,height)*.72);
+    g.addColorStop(0,'rgba(23,34,46,.30)');g.addColorStop(1,'rgba(4,7,11,.07)');
+    ctx.fillStyle=g;ctx.fillRect(0,0,width,height);
+  }
+
+  // Strict strand-by-strand construction schedule: one silk path is active at a time.
+  // A strand reaches its endpoint and remains visible before the next strand starts.
+  const BRIDGE_FLIGHT=2050, BRIDGE_TIGHTEN=520, BRIDGE_GAP=BRIDGE_FLIGHT+BRIDGE_TIGHTEN+260;
+  const BRIDGE_END=3*BRIDGE_GAP+BRIDGE_FLIGHT+BRIDGE_TIGHTEN;
+
+  const PERIMETER_START=BRIDGE_END+650, PERIMETER_COUNT=22;
+  const PERIMETER_DRAW=300, PERIMETER_STEP=PERIMETER_DRAW+75;
+  const PERIMETER_END=PERIMETER_START+PERIMETER_COUNT*PERIMETER_STEP;
+
+  const DRAPES_START=PERIMETER_END+220, DRAPE_DRAW=420, DRAPE_STEP=DRAPE_DRAW+90;
+  const DRAPES_END=DRAPES_START+6*DRAPE_STEP;
+  const OUTER_START=DRAPES_END+220, OUTER_DRAW=390, OUTER_STEP=OUTER_DRAW+90;
+  const OUTER_END=OUTER_START+8*OUTER_STEP;
+
+  const RADII_START=OUTER_END+350, RADII_COUNT=22, RADII_DRAW=520, RADII_STEP=RADII_DRAW+95;
+  const RADII_END=RADII_START+RADII_COUNT*RADII_STEP;
+  const AUX_START=RADII_END+450, AUX_DURATION=9000;
+  const CAPTURE_START=AUX_START+AUX_DURATION+350, CAPTURE_DURATION=14500;
+  const HUB_START=CAPTURE_START+CAPTURE_DURATION, HUB_COUNT=24, HUB_DRAW=150, HUB_STEP=180;
+  const TOTAL=HUB_START+HUB_COUNT*HUB_STEP+7*95+140;
+
+  function drawBridge(time,elapsed){
+    geometry.bridges.forEach((line,i)=>{
+      const local=elapsed-i*BRIDGE_GAP;
+      if(local<=0)return;
+      const flight=clamp(local/BRIDGE_FLIGHT);
+      const tighten=smooth((local-BRIDGE_FLIGHT)/BRIDGE_TIGHTEN);
+      const wind=windAt(time,line.phase);
+      const free=line.a.x===0||line.a.x===width ? pt(lerp(line.a.x,line.b.x,easeOut(flight)),lerp(line.a.y,line.b.y,easeOut(flight))+Math.sin(time*2.3+line.seed)*line.slack*wind*.6) : pt(lerp(line.a.x,line.b.x,easeOut(flight))+Math.sin(time*2.3+line.seed)*line.slack*wind*.6,lerp(line.a.y,line.b.y,easeOut(flight)));
+      if(flight<1){
+        const mid=pt(lerp(line.a.x,free.x,.52)+Math.sin(time*2.8+line.seed)*line.slack*wind*.8,lerp(line.a.y,free.y,.52)+Math.cos(time*2.1+line.seed)*line.slack*wind*.55);
+        const curve=[line.a,pt(lerp(line.a.x,mid.x,.5),lerp(line.a.y,mid.y,.5)),mid,pt(lerp(mid.x,free.x,.5),lerp(mid.y,free.y,.5)),free];
+        const dense=[];for(let s=0;s<curve.length-1;s++)for(let j=0;j<15;j++){const u=j/15;dense.push(pt(lerp(curve[s].x,curve[s+1].x,u),lerp(curve[s].y,curve[s+1].y,u)));}dense.push(free);
+        strokePartial(dense,1,'rgba(225,239,247,.64)',.7,.9,.55);
+        ctx.fillStyle='rgba(237,246,250,.82)';ctx.beginPath();ctx.arc(free.x,free.y,1.3,0,TAU);ctx.fill();
+      } else {
+        const slack=lerp(line.slack,5,tighten);
+        drawSilk(line.a,line.b,time,line.phase,slack,1,'structural',.92);
+        // Tiny adhesion point directly on the viewport edge.
+        [line.a,line.b].forEach(p=>{ctx.fillStyle='rgba(237,246,250,.62)';ctx.beginPath();ctx.arc(p.x,p.y,1.35,0,TAU);ctx.fill();});
+      }
+    });
+  }
+
+  function drawPerimeter(time,elapsed){
+    const order=geometry.perimeterOrder;
+    // Draw one complete frame edge, then move to the next edge. Never reveal
+    // several unfinished perimeter edges at the same time.
+    for(let k=0;k<PERIMETER_COUNT;k++){
+      const local=elapsed-(PERIMETER_START+k*PERIMETER_STEP);
+      if(local<=0)break;
+      const i=order[k],j=order[(k+1)%order.length];
+      const a=geometry.anchors[i],b=geometry.anchors[j];
+      const progress=clamp(local/PERIMETER_DRAW);
+      const pts=silkPoints(a.p,b.p,time,a.phase,randlessSlack(i,j,5.5),48,.55);
+      strokePartial(pts,easeOut(progress),'rgba(220,235,246,.76)',.78,.94,.45);
+      if(progress>=1){
+        [a.p,b.p].forEach(v=>{ctx.fillStyle='rgba(225,238,247,.55)';ctx.beginPath();ctx.arc(v.x,v.y,1.15,0,TAU);ctx.fill();});
+      }
+      if(progress<1)break;
+    }
+  }
+  function randlessSlack(i,j,base){return base+Math.sin(i*2.1+j*.73)*2.2;}
+
+  function drawRadii(time,elapsed){
+    // Each taut spoke is completed from hub to frame before the next spoke begins.
+    for(let k=0;k<geometry.radiusOrder.length;k++){
+      const local=elapsed-(RADII_START+k*RADII_STEP);
+      if(local<=0)break;
+      const i=geometry.radiusOrder[k],anchor=geometry.anchors[i];
+      const progress=clamp(local/RADII_DRAW);
+      strokePartial([geometry.hub,anchor.p],easeOut(progress),'rgba(218,233,244,.70)',.78,.96,.18);
+      if(progress<1)break;
+    }
+    // Three short reinforcing hub rays are also laid one after another.
+    if(elapsed>RADII_END){
+      const h=geometry.hub,a=geometry.anchors;
+      const reinforcements=[a[0],a[Math.floor(a.length/3)],a[Math.floor(a.length*2/3)]];
+      const localTime=elapsed-RADII_END;
+      for(let i=0;i<reinforcements.length;i++){
+        const q=clamp((localTime-i*145)/125);
+        if(q<=0)break;
+        const v=reinforcements[i],mid=pt(lerp(h.x,v.p.x,.16),lerp(h.y,v.p.y,.16));
+        strokePartial([h,mid],easeOut(q),'rgba(238,244,248,.38)',.58,.9);
+        if(q<1)break;
+      }
+    }
+  }
+
+  function normalizeAngle(a){return ((a%TAU)+TAU)%TAU;}
+  function sectorAt(angle){
+    const arr=geometry.spokeAngles, a=normalizeAngle(angle);
+    let idx=arr.length-1;
+    for(let i=0;i<arr.length;i++){if(arr[i]<=a)idx=i;else break;}
+    const next=(idx+1)%arr.length;
+    const left=arr[idx], right=next===0?arr[0]+TAU:arr[next];
+    const adjusted=a<left?a+TAU:a;
+    return {idx,mid:(left+right)*.5,frac:clamp((adjusted-left)/(right-left))};
+  }
+  function noise01(n){const x=Math.sin(n*127.1+geometry.spiralPhase*17.7)*43758.5453;return x-Math.floor(x);}
+  function spiralPoint(t,inward,time){
+    const {hub,rx,ry,spokeAngles}=geometry;
+    const turns=6.75;
+    const radial=inward ? 1-Math.pow(t,.84) : Math.pow(t,.84);
+    const baseR=.105+.895*radial; // preserves a dark free-zone around the hub
+    const angle=geometry.spiralPhase+t*turns*TAU
+      +.035*Math.sin(t*TAU*2.1+geometry.spiralPhase)
+      +.018*Math.sin(t*TAU*7.3+1.2);
+    const sector=sectorAt(angle);
+    const arcEnvelope=Math.pow(Math.sin(Math.PI*sector.frac),1.25);
+    const radiusNoise=(Math.sin(angle*2.17+geometry.spiralPhase)*.004
+      +Math.sin(angle*.73+2.4)*.003
+      +(noise01(Math.floor(t*turns*13)+sector.idx)-.5)*.0035)*arcEnvelope;
+    const r=baseR+radiusNoise;
+    const x0=hub.x+Math.cos(angle)*rx*r;
+    const y0=hub.y+Math.sin(angle)*ry*r;
+    // Gravity makes each elastic capture segment sag between taut radial spokes.
+    const topStrength=clamp((-Math.sin(sector.mid)-.42)/.58);
+    const sag=(1.5+5.2*r+10.5*topStrength*Math.pow(r,.7))*arcEnvelope;
+    const windX=windAt(time,sector.idx*.71)*arcEnvelope*(1.5+5*r);
+    const windY=Math.sin(time*.83+sector.idx*1.4)*arcEnvelope*(.8+2.5*r);
+    return pt(clamp(x0+windX,0,width),clamp(y0+sag+windY,0,height));
+  }
+  function spiralPolyline(inward,time){
+    const count=1900,pts=[];
+    for(let i=0;i<=count;i++)pts.push(spiralPoint(i/count,inward,time));
+    return pts;
+  }
+  function drawDew(time,progress){
+    const total=930, count=Math.floor(total*clamp(progress));
+    if(!count)return;
+    ctx.save();
+    for(let i=0;i<count;i++){
+      // Reveal beads only behind the advancing silk front; inner turns become denser and finer.
+      const u=(i+.5)/Math.max(1,count);
+      const t=progress*(1-Math.pow(1-u,1.85));
+      const p=spiralPoint(t,true,time);
+      const size=.34+(1-t)*1.04+(noise01(i+71)-.5)*.28;
+      const alpha=.48+noise01(i+19)*.42;
+      ctx.globalAlpha=alpha;
+      ctx.fillStyle=(i%7===0)?'rgba(255,250,231,.98)':'rgba(225,231,226,.82)';
+      ctx.shadowColor='rgba(239,235,212,.66)';ctx.shadowBlur=size>1?3.1:1.6;
+      ctx.beginPath();ctx.arc(p.x,p.y,Math.max(.22,size),0,TAU);ctx.fill();
+      // Tiny offset specular glint makes droplets read as rounded beads.
+      ctx.fillStyle='rgba(255,255,255,.9)';ctx.beginPath();ctx.arc(p.x-size*.28,p.y-size*.3,Math.max(.12,size*.22),0,TAU);ctx.fill();
+    }
+    ctx.restore();
+  }
+  function drawSpiral(time,elapsed,inward){
+    const start=inward?CAPTURE_START:AUX_START;
+    const duration=inward?CAPTURE_DURATION:AUX_DURATION;
+    const progress=clamp((elapsed-start)/duration);
+    if(progress<=0)return;
+    const pts=spiralPolyline(inward,time);
+    // ONE continuous silk strand, drawn from its first endpoint to its last. No segment restarts or parallel partial strands.
+    strokePartial(pts,easeOut(progress),
+      inward?'rgba(230,223,202,.88)':'rgba(184,208,226,.47)',
+      inward?.58:.48,inward?.98:.78,inward?1.45:.45);
+    if(inward)drawDew(time,progress);
+  }
+
+  function drawHub(time,elapsed){
+    if(elapsed<HUB_START)return;
+    const {hub,rx,ry}=geometry, maxR=Math.min(rx,ry)*.045;
+    ctx.save();ctx.lineCap='round';ctx.lineJoin='round';
+    // Dense, irregular center mat: each small silk loop is drawn completely in sequence.
+    for(let i=0;i<HUB_COUNT;i++){
+      const local=elapsed-(HUB_START+i*HUB_STEP);
+      if(local<=0)break;
+      const progress=clamp(local/HUB_DRAW);
+      const a=i*TAU/HUB_COUNT+Math.sin(i*1.7)*.08;
+      const r1=maxR*(.22+noise01(i+300)*.48),r2=maxR*(.65+noise01(i+500)*.34);
+      const bend=(noise01(i+700)-.5)*maxR*.32;
+      const pts=[];
+      for(let j=0;j<=24;j++){
+        const t=j/24,ang=a+t*(.7+noise01(i+900)*1.7),r=lerp(r1,r2,t);
+        pts.push(pt(hub.x+Math.cos(ang)*r+Math.sin(ang)*bend,hub.y+Math.sin(ang)*r+Math.cos(ang)*bend));
+      }
+      strokePartial(pts,easeOut(progress),'rgba(226,237,243,.62)',.48,.75,.3);
+      if(progress<1)break;
+    }
+    // Fine hub knots appear only after the 24 reinforcing threads are complete.
+    if(elapsed>=HUB_START+HUB_COUNT*HUB_STEP){
+      for(let i=0;i<7;i++){
+        const local=elapsed-(HUB_START+HUB_COUNT*HUB_STEP+i*95);
+        if(local<=0)break;
+        const q=clamp(local/80),a=i*TAU/7;
+        const r=maxR*(.25+i*.055);
+        ctx.globalAlpha=easeOut(q);ctx.strokeStyle='rgba(230,239,245,.36)';ctx.lineWidth=.42;
+        ctx.beginPath();ctx.ellipse(hub.x+Math.cos(a)*r*.12,hub.y+Math.sin(a)*r*.12,r*(.45+noise01(i+44)*.18),r*.34,a,0,TAU);ctx.stroke();
+        if(q<1)break;
+      }
+    }
+    ctx.restore();
+  }
+
+  function drawTopDrapes(time,elapsed){
+    // Each loose curtain-like top strand is drawn individually, left to right.
+    for(let i=0;i<geometry.topDrapes.length;i++){
+      const local=elapsed-(DRAPES_START+i*DRAPE_STEP);
+      if(local<=0)break;
+      const d=geometry.topDrapes[i],p=clamp(local/DRAPE_DRAW);
+      const sag=d.sag*(1+.13*Math.sin(time*.8+d.phase));
+      const points=[];
+      for(let j=0;j<=90;j++){
+        const t=j/90,env=Math.pow(Math.sin(Math.PI*t),1.15);
+        points.push(pt(lerp(d.a.x,d.b.x,t),sag*env+Math.sin(time*.9+d.phase+t*TAU)*env*2.1));
+      }
+      strokePartial(points,easeOut(p),'rgba(220,235,245,.43)',.48,.68,.3);
+      if(p<1)break;
+    }
+  }
+  function drawOuterCables(time,elapsed){
+    // Long peripheral support cables are added one full cable at a time.
+    for(let i=0;i<geometry.outerCables.length;i++){
+      const local=elapsed-(OUTER_START+i*OUTER_STEP);
+      if(local<=0)break;
+      const c=geometry.outerCables[i],p=clamp(local/OUTER_DRAW);
+      const pts=silkPoints(c.a,c.b,time,c.phase,c.slack,54,.85);
+      strokePartial(pts,easeOut(p),'rgba(190,212,228,.32)',.46,.6,.2);
+      if(p<1)break;
+    }
+  }
+
+  function drawCompletedSilk(time,elapsed){
+    drawBridge(time,elapsed);
+    drawPerimeter(time,elapsed);
+    drawTopDrapes(time,elapsed);
+    drawOuterCables(time,elapsed);
+    drawRadii(time,elapsed);
+    if(elapsed>=AUX_START)drawSpiral(time,elapsed,false);
+    if(elapsed>=CAPTURE_START)drawSpiral(time,elapsed,true);
+    drawHub(time,elapsed);
+  }
+
+  function updateWind(dt,time){
+    if(time>nextGust){gustTarget=randRange(-.9,1.0);nextGust=time+randRange(2.8,6.2);}
+    gust+=(gustTarget-gust)*(1-Math.exp(-dt*.7));
+    wind=Math.sin(time*.37)*.25+Math.sin(time*.91+1.7)*.16+gust*.35;
+  }
+
+  function frame(now){
+    const dt=Math.min(.04,Math.max(.001,(now-lastFrame)/1000));lastFrame=now;
+    const elapsed=now-startTime,time=now/1000;
+    updateWind(dt,time);
+    background();
+    drawCompletedSilk(time,elapsed);
+    requestAnimationFrame(frame);
+  }
+
+  window.addEventListener('resize',resize,{passive:true});
+  resize();
+  requestAnimationFrame(frame);
+})();
+</script>
+</body>
+</html>

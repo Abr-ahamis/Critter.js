@@ -1,0 +1,923 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<meta name="theme-color" content="#101416">
+<title>Badumna insignis — Interactive 3D Spider</title>
+<style>
+:root{color-scheme:dark;--bg:#101416;--panel:#1b2225;--panel2:#222b2f;--line:#364247;--text:#e8eeec;--muted:#a8b4b5;--accent:#d6aa72;--green:#9dc9a8}
+*{box-sizing:border-box}html,body{margin:0;width:100%;height:100%;overflow:hidden;background:var(--bg);color:var(--text);font:14px/1.45 Inter,ui-sans-serif,system-ui,-apple-system,"Segoe UI",sans-serif}
+#stage{position:fixed;inset:0;background:radial-gradient(ellipse at 50% 42%,#e8ece9 0%,#d8dfdc 58%,#c7d0ce 100%)}
+#view{width:100%;height:100%;display:block;touch-action:none;outline:none}
+.topbar{position:fixed;z-index:5;left:16px;right:16px;top:14px;display:flex;align-items:flex-start;justify-content:space-between;gap:12px;pointer-events:none}
+.brand,.readout,.toolbar,.help,.scale{pointer-events:auto;background:rgba(18,24,27,.91);border:1px solid rgba(130,150,154,.24);box-shadow:0 12px 34px #0002;backdrop-filter:blur(12px);border-radius:13px}
+.brand{padding:11px 15px;min-width:245px}.eyebrow{font:10px/1.4 ui-monospace,SFMono-Regular,Consolas,monospace;letter-spacing:.17em;color:var(--accent)}h1{font-size:16px;margin:3px 0 0;font-weight:700;letter-spacing:.01em}.latin{font-style:italic;font-weight:500;color:#cad5d1}.readout{padding:9px 12px;display:flex;align-items:center;gap:11px;font:11px ui-monospace,monospace;color:#c6d0d0}.dot{width:8px;height:8px;border-radius:50%;background:#77d49b;box-shadow:0 0 12px #77d49b;flex:none}.readout.paused .dot{background:#d5a56b;box-shadow:0 0 10px #d5a56b}
+.toolbar{position:fixed;z-index:5;left:50%;bottom:16px;transform:translateX(-50%);width:min(940px,calc(100% - 24px));padding:10px;display:flex;align-items:center;justify-content:center;gap:7px;flex-wrap:wrap}
+button{font:600 11px ui-monospace,SFMono-Regular,Consolas,monospace;letter-spacing:.02em;color:#e7eeeb;background:#273135;border:1px solid #435056;border-radius:8px;padding:9px 11px;cursor:pointer;transition:background .16s,border-color .16s,transform .16s;white-space:nowrap}
+button:hover{background:#354248;border-color:#87989b}button:active{transform:translateY(1px)}button.active{background:#604b32;border-color:#d6aa72;color:#fff}button.primary{background:#34483d;border-color:#64816e}button:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.sep{height:26px;width:1px;background:#455256;margin:0 3px}.speed{display:flex;align-items:center;gap:7px;padding:0 4px;color:#b9c4c2;font:10px ui-monospace,monospace}.speed input{width:80px;accent-color:var(--accent)}
+.help{position:fixed;z-index:4;left:16px;bottom:17px;padding:10px 12px;max-width:255px;color:#e0e7e4;font:10px/1.65 ui-monospace,monospace}.help strong{color:var(--accent);font-weight:600}.scale{position:fixed;right:17px;bottom:88px;z-index:4;padding:9px 11px;border-radius:9px;background:#172024d9;border:1px solid #344147;color:#d2ddda;font:10px/1.55 ui-monospace,monospace;text-align:right;pointer-events:none}.scale b{color:#fff}
+.loading{position:fixed;z-index:10;inset:0;display:flex;align-items:center;justify-content:center;background:radial-gradient(ellipse at 50% 35%,#293438,#111719);transition:opacity .45s}.loading.hidden{opacity:0;pointer-events:none}.loadingBox{width:min(390px,calc(100% - 38px));border:1px solid #435156;background:#182124;border-radius:16px;padding:22px;box-shadow:0 22px 70px #0007}.loadingTitle{font:12px ui-monospace,monospace;letter-spacing:.1em;color:var(--accent)}.bar{height:4px;margin-top:16px;border-radius:9px;background:#303a3e;overflow:hidden}.bar i{display:block;height:100%;width:30%;background:var(--accent);animation:load 1.1s ease-in-out infinite alternate}@keyframes load{to{width:96%}}#error{display:none;color:#ffd0c6;font:12px/1.6 ui-monospace,monospace;margin-top:12px;white-space:pre-wrap}.hintTag{color:#93a5a4}.mobileHelp{display:none}
+@media(max-width:720px){.topbar{left:9px;right:9px;top:9px}.brand{min-width:0;padding:9px 11px}.brand h1{font-size:13px}.eyebrow{font-size:9px}.readout{font-size:9px;padding:8px}.toolbar{bottom:9px;gap:5px;padding:8px}.toolbar button{padding:8px 9px;font-size:10px}.sep{display:none}.help{display:none}.mobileHelp{display:block;position:fixed;top:73px;left:10px;z-index:4;padding:7px 9px;border-radius:8px;background:#172024c9;color:#dce5e1;font:9px ui-monospace,monospace}.scale{right:9px;bottom:82px;font-size:9px}}
+</style>
+</head>
+<body>
+<div id="stage"><canvas id="view" aria-label="Interactive 3D black house spider. Drag to orbit, wheel to zoom."></canvas></div>
+
+<div class="topbar">
+ <div class="brand"><div class="eyebrow">INTERACTIVE 3D ANATOMY</div><h1>Black House Spider <span class="latin">/ Badumna insignis</span></h1></div>
+ <div class="readout" id="status"><span class="dot"></span><span id="statusText">BUILDING SPECIMEN</span><span class="hintTag">· 8 LEGS</span></div>
+</div>
+
+<div class="mobileHelp">DRAG: ORBIT · PINCH/WHEEL: ZOOM · TWO-FINGER: PAN</div>
+<div class="scale"><b>APPROXIMATE SPECIMEN SCALE</b><br>Body: 17–18 mm · legs: 7 segments each<br>Procedural reconstruction</div>
+<div class="help"><strong>MOUSE CONTROLS</strong><br>Left-drag: rotate camera<br>Wheel: zoom in / out<br>Right-drag or Shift-drag: pan<br>Double-click: reset camera<br><span class="hintTag">The spider wanders continuously across the ground plane.</span></div>
+
+<div class="toolbar" id="toolbar">
+ <button data-view="three" class="active">3/4 VIEW</button>
+ <button data-view="top">TOP</button>
+ <button data-view="front">FRONT</button>
+ <button data-view="rear">REAR</button>
+ <button data-view="left">LEFT</button>
+ <button data-view="right">RIGHT</button>
+ <span class="sep"></span>
+ <button id="walkBtn" class="primary">Ⅱ PAUSE WALK</button>
+ <label class="speed">SPEED <input id="speed" type="range" min="0.25" max="2.4" step="0.05" value="1"><span id="speedValue">1.0×</span></label>
+ <button id="resetBtn">RESET VIEW</button>
+</div>
+
+<div class="loading" id="loading">
+  <div class="loadingBox">
+    <div class="loadingTitle">BUILDING THE SPIDER IN 3D</div>
+    <div style="color:#aebbb9;font-size:12px;margin-top:7px">Reconstructing the anatomy from the reference model…</div>
+    <div class="bar"><i></i></div>
+    <div id="error"></div>
+  </div>
+</div>
+
+<script type="importmap">
+{
+  "imports": {
+    "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+    "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
+  }
+}
+</script>
+
+<script type="module">
+import * as THREE from 'three';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+
+/* ============================================================
+   BADUMNA INSIGNIS — procedural 3D reconstruction
+   Anatomy mirrors the reference GLB node tree:
+     CEPHALOTHORAX · carapace_grooves · PEDICEL
+     ABDOMEN_opisthosoma · abdomen_sheen · ABDOMEN_dorsal_markings
+     ABDOMEN_setae · CARAPACE_setae · SPINNERETS
+     EYES (AM/AL/PM/PL ×2) · CHELICERAE · FANGS · LABIUM
+     PEDIPALPS · PEDIPALP_tip
+     L1..L4 / R1..R4 legs, 7 segments each:
+       COX A · TROCHANTER · FEMUR · PATELLA · TIBIA · METATARSUS · TARSUS
+       + TARSAL_CLAWS + setae
+   ============================================================ */
+
+const canvas     = document.getElementById('view');
+const loadingEl  = document.getElementById('loading');
+const statusEl   = document.getElementById('status');
+const statusText = document.getElementById('statusText');
+const errorEl    = document.getElementById('error');
+
+try { init(); } catch (e) { errorEl.style.display = 'block'; errorEl.textContent = e.stack || String(e); }
+
+function init() {
+
+/* ------------------------------------------------------------------ */
+/* RENDERER                                                            */
+/* ------------------------------------------------------------------ */
+const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, alpha: true });
+renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+renderer.setSize(window.innerWidth, window.innerHeight);
+renderer.shadowMap.enabled = true;
+renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
+renderer.toneMappingExposure = 1.02;
+renderer.outputColorSpace = THREE.SRGBColorSpace;
+
+const scene = new THREE.Scene();
+
+const camera = new THREE.PerspectiveCamera(38, window.innerWidth / window.innerHeight, 0.05, 200);
+camera.position.set(4.6, 3.4, 5.2);
+
+/* ------------------------------------------------------------------ */
+/* ENVIRONMENT (soft studio gradient → PMREM)                          */
+/* ------------------------------------------------------------------ */
+(function buildEnv() {
+  const c = document.createElement('canvas');
+  c.width = 64; c.height = 32;
+  const g = c.getContext('2d');
+  const grd = g.createLinearGradient(0, 0, 0, 32);
+  grd.addColorStop(0.00, '#ffffff');
+  grd.addColorStop(0.42, '#d3dcda');
+  grd.addColorStop(0.52, '#9faaa9');
+  grd.addColorStop(1.00, '#39423f');
+  g.fillStyle = grd; g.fillRect(0, 0, 64, 32);
+  const tex = new THREE.CanvasTexture(c);
+  tex.mapping = THREE.EquirectangularReflectionMapping;
+  tex.colorSpace = THREE.SRGBColorSpace;
+  const pmrem = new THREE.PMREMGenerator(renderer);
+  scene.environment = pmrem.fromEquirectangular(tex).texture;
+  tex.dispose(); pmrem.dispose();
+})();
+
+/* ------------------------------------------------------------------ */
+/* LIGHTS                                                              */
+/* ------------------------------------------------------------------ */
+scene.add(new THREE.HemisphereLight(0xe4ecea, 0x3a4341, 1.55));
+
+const key = new THREE.DirectionalLight(0xfff3e2, 2.5);
+key.position.set(5.5, 9.0, 6.5);
+key.castShadow = true;
+key.shadow.mapSize.set(2048, 2048);
+key.shadow.camera.left = -6; key.shadow.camera.right = 6;
+key.shadow.camera.top = 6;   key.shadow.camera.bottom = -6;
+key.shadow.camera.near = 0.5; key.shadow.camera.far = 32;
+key.shadow.bias = -0.0008;
+key.shadow.normalBias = 0.022;
+scene.add(key);
+
+const rim = new THREE.DirectionalLight(0xc2d8ff, 1.0);
+rim.position.set(-7, 4.0, -6);
+scene.add(rim);
+
+const fill = new THREE.DirectionalLight(0xffffff, 0.35);
+fill.position.set(-4, 1.6, 7);
+scene.add(fill);
+
+/* ------------------------------------------------------------------ */
+/* GROUND (subtle dust + radial fade → motion cue)                     */
+/* ------------------------------------------------------------------ */
+function groundTexture() {
+  const S = 1024;
+  const c = document.createElement('canvas');
+  c.width = c.height = S;
+  const g = c.getContext('2d');
+  g.clearRect(0, 0, S, S);
+
+  for (let i = 0; i < 11000; i++) {
+    const x = Math.random() * S, y = Math.random() * S;
+    const r = Math.random() * 1.7 + 0.25;
+    g.globalAlpha = 0.03 + Math.random() * 0.16;
+    g.fillStyle = Math.random() < 0.55 ? '#7d8785' : '#5c6663';
+    g.beginPath(); g.arc(x, y, r, 0, Math.PI * 2); g.fill();
+  }
+  // a few larger grains
+  for (let i = 0; i < 420; i++) {
+    const x = Math.random() * S, y = Math.random() * S;
+    g.globalAlpha = 0.05 + Math.random() * 0.1;
+    g.fillStyle = '#6a7472';
+    g.beginPath(); g.arc(x, y, Math.random() * 5 + 1.5, 0, Math.PI * 2); g.fill();
+  }
+  g.globalAlpha = 1;
+
+  // radial fade so the plane melts into the CSS gradient backdrop
+  const mask = g.createRadialGradient(S / 2, S / 2, S * 0.06, S / 2, S / 2, S * 0.5);
+  mask.addColorStop(0, 'rgba(0,0,0,1)');
+  mask.addColorStop(0.62, 'rgba(0,0,0,0.85)');
+  mask.addColorStop(1, 'rgba(0,0,0,0)');
+  g.globalCompositeOperation = 'destination-in';
+  g.fillStyle = mask; g.fillRect(0, 0, S, S);
+  g.globalCompositeOperation = 'source-over';
+
+  const t = new THREE.CanvasTexture(c);
+  t.colorSpace = THREE.SRGBColorSpace;
+  t.anisotropy = 8;
+  return t;
+}
+
+const ground = new THREE.Mesh(
+  new THREE.PlaneGeometry(34, 34),
+  new THREE.MeshStandardMaterial({
+    map: groundTexture(),
+    color: 0xb9c3bf,
+    roughness: 1,
+    metalness: 0,
+    transparent: true,
+    depthWrite: false
+  })
+);
+ground.rotation.x = -Math.PI / 2;
+ground.position.y = -0.002;
+ground.receiveShadow = true;
+scene.add(ground);
+
+/* ------------------------------------------------------------------ */
+/* TEXTURES                                                            */
+/* ------------------------------------------------------------------ */
+function makeCanvas(w, h) {
+  const c = document.createElement('canvas');
+  c.width = w; c.height = h;
+  return [c, c.getContext('2d')];
+}
+
+/* Abdomen: dorsal chevrons + pale median band.
+   Sphere geometry is rotated so v runs front(1) → back(0) and
+   u = 0.75 is the dorsal midline. */
+function abdomenTexture() {
+  const W = 1024, H = 512;
+  const [cv, g] = makeCanvas(W, H);
+
+  const base = g.createLinearGradient(0, 0, W, 0);
+  base.addColorStop(0.00, '#0c0a09');
+  base.addColorStop(0.50, '#191311');
+  base.addColorStop(0.75, '#241a14');
+  base.addColorStop(1.00, '#0c0a09');
+  g.fillStyle = base; g.fillRect(0, 0, W, H);
+
+  for (let i = 0; i < 5200; i++) {
+    const x = Math.random() * W, y = Math.random() * H;
+    const r = Math.random() * 11 + 1;
+    g.globalAlpha = Math.random() * 0.07;
+    g.fillStyle = Math.random() < 0.5 ? '#4e3f31' : '#080706';
+    g.beginPath(); g.arc(x, y, r, 0, Math.PI * 2); g.fill();
+  }
+  g.globalAlpha = 1;
+
+  const cx = W * 0.75; // dorsal midline
+
+  // pale median band
+  const band = g.createLinearGradient(cx - 78, 0, cx + 78, 0);
+  band.addColorStop(0.00, 'rgba(122,102,80,0)');
+  band.addColorStop(0.50, 'rgba(158,133,102,0.55)');
+  band.addColorStop(1.00, 'rgba(122,102,80,0)');
+  g.fillStyle = band;
+  g.fillRect(cx - 78, H * 0.14, 156, H * 0.72);
+
+  // dorsal chevrons (arrow marks)
+  g.lineCap = 'round';
+  for (let k = 0; k < 6; k++) {
+    const y = H * (0.20 + k * 0.125);
+    g.lineWidth = 10 - k * 0.9;
+    g.strokeStyle = 'rgba(176,152,118,' + (0.52 - k * 0.05) + ')';
+    g.beginPath();
+    g.moveTo(cx - 96, y + 44);
+    g.quadraticCurveTo(cx, y - 10, cx + 96, y + 44);
+    g.stroke();
+  }
+
+  // lateral pale blotches
+  for (let k = 0; k < 7; k++) {
+    const y = H * (0.22 + k * 0.10);
+    const w = 30 + Math.random() * 34;
+    g.globalAlpha = 0.18;
+    g.fillStyle = '#8d775c';
+    g.beginPath(); g.ellipse(cx - 168, y, w, 14, 0, 0, Math.PI * 2); g.fill();
+    g.beginPath(); g.ellipse(cx + 168, y, w, 14, 0, 0, Math.PI * 2); g.fill();
+  }
+  g.globalAlpha = 1;
+
+  // pale anterior collar (top of canvas = front of abdomen)
+  const collar = g.createLinearGradient(0, 0, 0, H * 0.18);
+  collar.addColorStop(0, 'rgba(150,132,108,0.34)');
+  collar.addColorStop(1, 'rgba(150,132,108,0)');
+  g.fillStyle = collar;
+  g.fillRect(0, 0, W, H * 0.18);
+
+  const t = new THREE.CanvasTexture(cv);
+  t.colorSpace = THREE.SRGBColorSpace;
+  t.anisotropy = 8;
+  return t;
+}
+
+/* Carapace: subtle mottling only (no pinching artefacts at the UV pole). */
+function carapaceTexture() {
+  const W = 512, H = 512;
+  const [cv, g] = makeCanvas(W, H);
+  g.fillStyle = '#1b1512'; g.fillRect(0, 0, W, H);
+  for (let i = 0; i < 3200; i++) {
+    const x = Math.random() * W, y = Math.random() * H;
+    g.globalAlpha = Math.random() * 0.085;
+    g.fillStyle = Math.random() < 0.5 ? '#3d2f24' : '#090706';
+    g.beginPath(); g.arc(x, y, Math.random() * 7 + 1, 0, Math.PI * 2); g.fill();
+  }
+  g.globalAlpha = 1;
+  const t = new THREE.CanvasTexture(cv);
+  t.colorSpace = THREE.SRGBColorSpace;
+  t.anisotropy = 8;
+  return t;
+}
+
+/* ------------------------------------------------------------------ */
+/* MATERIALS                                                           */
+/* ------------------------------------------------------------------ */
+const matCarapace = new THREE.MeshPhysicalMaterial({
+  map: carapaceTexture(),
+  roughness: 0.33, metalness: 0.0,
+  clearcoat: 0.72, clearcoatRoughness: 0.20,
+  envMapIntensity: 1.15
+});
+
+const matAbdomen = new THREE.MeshPhysicalMaterial({
+  map: abdomenTexture(),
+  roughness: 0.60, metalness: 0.0,
+  clearcoat: 0.22, clearcoatRoughness: 0.55,
+  sheen: 0.75, sheenColor: new THREE.Color(0x7b8a80), sheenRoughness: 0.85,
+  envMapIntensity: 0.9
+});
+
+const matLeg   = new THREE.MeshPhysicalMaterial({ color: 0x261d17, roughness: 0.42, clearcoat: 0.55, clearcoatRoughness: 0.30, envMapIntensity: 1.0 });
+const matJoint = new THREE.MeshPhysicalMaterial({ color: 0x2e241d, roughness: 0.34, clearcoat: 0.62, clearcoatRoughness: 0.26 });
+const matDark  = new THREE.MeshPhysicalMaterial({ color: 0x120e0c, roughness: 0.26, clearcoat: 0.85, clearcoatRoughness: 0.16, envMapIntensity: 1.3 });
+const matEye   = new THREE.MeshPhysicalMaterial({ color: 0x050505, roughness: 0.05, metalness: 0.30, clearcoat: 1.0, clearcoatRoughness: 0.02, envMapIntensity: 2.6 });
+const matSeta  = new THREE.MeshStandardMaterial({ color: 0x453a2e, roughness: 0.95, metalness: 0.0 });
+
+/* ------------------------------------------------------------------ */
+/* SPIDER ROOT                                                         */
+/* ------------------------------------------------------------------ */
+const spider = new THREE.Group();         // world transform (walk / turn)
+scene.add(spider);
+
+const body = new THREE.Group();           // body bob
+spider.add(body);
+
+const BODY_Y = 0.60;
+
+/* Key landmarks ---------------------------------------------------- */
+const CEPH = { c: new THREE.Vector3(0, BODY_Y, 0.12), r: new THREE.Vector3(0.52, 0.27, 0.62) };
+const ABD  = { c: new THREE.Vector3(0, BODY_Y + 0.03, -1.28), r: new THREE.Vector3(0.60, 0.56, 0.80) };
+
+/* Carapace surface helper — direction → point on ellipsoid */
+function cephSurf(x, y, z, off = 0) {
+  const d = new THREE.Vector3(x, y, z).normalize();
+  const a = CEPH.r.x, b = CEPH.r.y, c = CEPH.r.z;
+  const t = 1 / Math.sqrt((d.x / a) ** 2 + (d.y / b) ** 2 + (d.z / c) ** 2);
+  return d.multiplyScalar(t + off).add(CEPH.c);
+}
+
+/* ------------------------------------------------------------------ */
+/* CEPHALOTHORAX                                                       */
+/* ------------------------------------------------------------------ */
+const cephGeo = new THREE.SphereGeometry(1, 44, 30);
+cephGeo.rotateX(Math.PI / 2);             // UV pole → +Z (head)
+const cephalothorax = new THREE.Mesh(cephGeo, matCarapace);
+cephalothorax.name = 'CEPHALOTHORAX_fused_head_thorax';
+cephalothorax.position.copy(CEPH.c);
+cephalothorax.scale.copy(CEPH.r);
+cephalothorax.castShadow = true;
+cephalothorax.receiveShadow = true;
+body.add(cephalothorax);
+
+/* carapace_grooves — shallow foveal depression + radiating ridges */
+(function carapaceGrooves() {
+  const grp = new THREE.Group();
+  grp.name = 'carapace_grooves';
+
+  const fovea = new THREE.Mesh(new THREE.SphereGeometry(0.055, 16, 12), matDark);
+  fovea.position.copy(cephSurf(0, 0.96, -0.30, -0.012));
+  fovea.scale.set(1.5, 0.45, 1.0);
+  grp.add(fovea);
+
+  for (let k = 0; k < 6; k++) {
+    const a = (k / 5 - 0.5) * 1.5;
+    const dir = new THREE.Vector3(Math.sin(a) * 0.75, 0.62, 0.75 + Math.abs(a) * 0.15);
+    const p = cephSurf(dir.x, dir.y, dir.z, -0.006);
+    const groove = new THREE.Mesh(new THREE.SphereGeometry(1, 10, 8), matDark);
+    groove.position.copy(p);
+    groove.scale.set(0.014, 0.010, 0.115);
+    groove.lookAt(p.clone().add(dir));
+    grp.add(groove);
+  }
+  body.add(grp);
+})();
+
+/* ------------------------------------------------------------------ */
+/* PEDICEL                                                             */
+/* ------------------------------------------------------------------ */
+const pedicel = new THREE.Mesh(new THREE.CylinderGeometry(0.085, 0.115, 0.26, 18), matDark);
+pedicel.name = 'PEDICEL';
+pedicel.rotation.x = Math.PI / 2;
+pedicel.position.set(0, BODY_Y - 0.01, -0.50);
+pedicel.castShadow = true;
+body.add(pedicel);
+
+/* ------------------------------------------------------------------ */
+/* ABDOMEN (opisthosoma)                                               */
+/* ------------------------------------------------------------------ */
+const abdGeo = new THREE.SphereGeometry(1, 52, 36);
+abdGeo.rotateX(Math.PI / 2);              // v runs front→back, u=0.75 = dorsal
+const abdomen = new THREE.Mesh(abdGeo, matAbdomen);
+abdomen.name = 'ABDOMEN_opisthosoma';
+abdomen.position.copy(ABD.c);
+abdomen.scale.copy(ABD.r);
+abdomen.rotation.x = -0.06;
+abdomen.castShadow = true;
+abdomen.receiveShadow = true;
+body.add(abdomen);
+
+/* abdomen_sheen — faint highlight lobe on the dorsal-anterior */
+(function abdomenSheen() {
+  const sheen = new THREE.Mesh(
+    new THREE.SphereGeometry(1, 24, 18),
+    new THREE.MeshPhysicalMaterial({
+      color: 0x8e9a90, transparent: true, opacity: 0.075,
+      roughness: 0.25, metalness: 0.0, clearcoat: 1.0,
+      clearcoatRoughness: 0.1, depthWrite: false, envMapIntensity: 2.0
+    })
+  );
+  sheen.name = 'abdomen_sheen';
+  sheen.position.set(0, ABD.c.y + 0.20, ABD.c.z + 0.10);
+  sheen.scale.set(0.34, 0.10, 0.42);
+  body.add(sheen);
+})();
+
+/* ABDOMEN_dorsal_markings — raised pale chevrons along the dorsal midline */
+(function dorsalMarkings() {
+  const grp = new THREE.Group();
+  grp.name = 'ABDOMEN_dorsal_markings';
+  const matMark = new THREE.MeshStandardMaterial({ color: 0x7d6a52, roughness: 0.85, metalness: 0.0 });
+
+  for (let k = 0; k < 6; k++) {
+    const t = 0.16 + k * 0.135;               // along the length
+    const ang = (t - 0.5) * Math.PI * 0.96;   // latitude on abdomen sphere
+    const y = Math.cos(ang) * ABD.r.y;
+    const z = -Math.sin(ang) * ABD.r.z;
+
+    for (const s of [-1, 1]) {
+      const m = new THREE.Mesh(new THREE.SphereGeometry(1, 12, 8), matMark);
+      m.position.set(s * (0.075 + k * 0.012), ABD.c.y + y * 0.965, ABD.c.z + z * 0.94);
+      m.scale.set(0.13, 0.012, 0.035);
+      m.rotation.z = s * 0.55;
+      m.rotation.x = -0.55;
+      grp.add(m);
+    }
+  }
+  // pale anterior collar
+  const collar = new THREE.Mesh(new THREE.TorusGeometry(1, 0.055, 8, 30, Math.PI), matMark);
+  collar.position.set(0, ABD.c.y + 0.20, ABD.c.z + 0.52);
+  collar.rotation.set(Math.PI * 0.5, 0, 0);
+  collar.scale.set(0.40, 0.32, 0.30);
+  grp.add(collar);
+
+  body.add(grp);
+})();
+
+/* ------------------------------------------------------------------ */
+/* SETAE (hairs)                                                       */
+/* ------------------------------------------------------------------ */
+function addSetae(parent, centre, radii, count, baseScale) {
+  const geo = new THREE.ConeGeometry(0.0055, 0.062, 4, 1, true);
+  geo.translate(0, 0.031, 0);
+
+  const im = new THREE.InstancedMesh(geo, matSeta, count);
+  im.name = 'setae';
+  const dummy = new THREE.Object3D();
+  const up = new THREE.Vector3(0, 1, 0);
+  const a = radii.x, b = radii.y, c = radii.z;
+
+  for (let i = 0; i < count; i++) {
+    const u = Math.random() * 2 - 1;
+    const th = Math.random() * Math.PI * 2;
+    const rr = Math.sqrt(1 - u * u);
+    const d = new THREE.Vector3(rr * Math.cos(th), u, rr * Math.sin(th));
+
+    const t = 1 / Math.sqrt((d.x / a) ** 2 + (d.y / b) ** 2 + (d.z / c) ** 2);
+    const p = d.clone().multiplyScalar(t);
+
+    const n = new THREE.Vector3(p.x / (a * a), p.y / (b * b), p.z / (c * c)).normalize();
+
+    dummy.position.copy(p).add(centre).addScaledVector(n, 0.001);
+    dummy.quaternion.setFromUnitVectors(up, n);
+    dummy.rotateX((Math.random() - 0.5) * 0.6);
+    dummy.rotateZ((Math.random() - 0.5) * 0.6);
+    dummy.scale.setScalar(baseScale * (0.55 + Math.random() * 0.9));
+    dummy.updateMatrix();
+    im.setMatrixAt(i, dummy.matrix);
+  }
+  im.instanceMatrix.needsUpdate = true;
+  parent.add(im);
+  return im;
+}
+
+addSetae(body, CEPH.c, CEPH.r, 620, 1.0);   // CARAPACE_setae
+addSetae(body, ABD.c, ABD.r, 900, 1.35);    // ABDOMEN_setae
+
+/* ------------------------------------------------------------------ */
+/* SPINNERETS                                                          */
+/* ------------------------------------------------------------------ */
+(function spinnerets() {
+  const grp = new THREE.Group();
+  grp.name = 'SPINNERETS';
+  const spec = [
+    [0.00, -0.010, 0.185],
+    [-0.10, -0.045, 0.150],
+    [0.10, -0.045, 0.150]
+  ];
+  for (const [x, dy, len] of spec) {
+    const s = new THREE.Mesh(new THREE.ConeGeometry(0.052, len, 12), matDark);
+    s.position.set(x, ABD.c.y - 0.16 + dy, ABD.c.z - ABD.r.z + 0.02);
+    s.rotation.x = -Math.PI / 2 - 0.45;
+    s.castShadow = true;
+    grp.add(s);
+
+    const knob = new THREE.Mesh(new THREE.SphereGeometry(0.045, 10, 8), matDark);
+    knob.position.copy(s.position);
+    knob.position.z += 0.02;
+    grp.add(knob);
+  }
+  body.add(grp);
+})();
+
+/* ------------------------------------------------------------------ */
+/* EYES — 8, in two rows (AM, AL, PM, PL)                              */
+/* ------------------------------------------------------------------ */
+(function eyes() {
+  const grp = new THREE.Group();
+  grp.name = 'EYES';
+  const spec = [
+    ['AM', 0.10, 0.62, 0.90, 0.030],
+    ['AL', 0.40, 0.40, 0.88, 0.035],
+    ['PM', 0.21, 0.86, 0.62, 0.031],
+    ['PL', 0.54, 0.66, 0.60, 0.033]
+  ];
+  for (const [name, x, y, z, r] of spec) {
+    for (const s of [-1, 1]) {
+      const eye = new THREE.Mesh(new THREE.SphereGeometry(r, 18, 14), matEye);
+      eye.name = 'EYE_' + name + (s < 0 ? '_L' : '_R');
+      eye.position.copy(cephSurf(s * x, y, z, r * 0.35));
+      eye.castShadow = true;
+      grp.add(eye);
+    }
+  }
+  body.add(grp);
+})();
+
+/* ------------------------------------------------------------------ */
+/* CHELICERAE · FANGS · LABIUM                                         */
+/* ------------------------------------------------------------------ */
+(function mouthparts() {
+  const grp = new THREE.Group();
+  grp.name = 'CHELICERAE';
+
+  for (const s of [-1, 1]) {
+    const ch = new THREE.Mesh(new THREE.SphereGeometry(1, 20, 16), matDark);
+    ch.position.set(s * 0.135, BODY_Y - 0.13, 0.60);
+    ch.scale.set(0.105, 0.175, 0.125);
+    ch.rotation.x = 0.15;
+    ch.castShadow = true;
+    grp.add(ch);
+
+    const fang = new THREE.Mesh(new THREE.ConeGeometry(0.036, 0.21, 12), matDark);
+    fang.name = 'FANG';
+    fang.position.set(s * 0.125, BODY_Y - 0.275, 0.575);
+    fang.rotation.x = Math.PI - 0.55;
+    fang.rotation.z = s * 0.14;
+    fang.castShadow = true;
+    grp.add(fang);
+  }
+
+  const labium = new THREE.Mesh(new THREE.SphereGeometry(1, 14, 10), matDark);
+  labium.name = 'LABIUM';
+  labium.position.set(0, BODY_Y - 0.205, 0.545);
+  labium.scale.set(0.085, 0.075, 0.115);
+  grp.add(labium);
+
+  body.add(grp);
+})();
+
+/* ------------------------------------------------------------------ */
+/* LEG BUILDER (7 segments, FK chain)                                  */
+/* ------------------------------------------------------------------ */
+const jointGeo = new THREE.SphereGeometry(1, 12, 10);
+
+/*  angle is RELATIVE to the parent segment (rotation about local Z)   */
+const LEG_SEGMENTS = [
+  { name: 'COXA',       len: 0.18, r0: 0.095, r1: 0.085, ang: -0.05 },
+  { name: 'TROCHANTER', len: 0.14, r0: 0.085, r1: 0.080, ang: -0.30 },
+  { name: 'FEMUR',      len: 0.78, r0: 0.080, r1: 0.062, ang:  0.85 },
+  { name: 'PATELLA',    len: 0.28, r0: 0.062, r1: 0.056, ang: -0.10 },
+  { name: 'TIBIA',      len: 0.70, r0: 0.056, r1: 0.042, ang: -1.05 },
+  { name: 'METATARSUS', len: 0.50, r0: 0.042, r1: 0.030, ang: -0.55 },
+  { name: 'TARSUS',     len: 0.28, r0: 0.030, r1: 0.018, ang:  0.70 }
+];
+
+function buildLimb(segments, prefix, options = {}) {
+  const root = new THREE.Group();
+  root.name = prefix;
+  let parent = new THREE.Group();
+  root.add(parent);
+
+  const pivots = [];
+  const baseAng = [];
+
+  for (let i = 0; i < segments.length; i++) {
+    const s = segments[i];
+
+    const pivot = new THREE.Group();
+    pivot.rotation.z = s.ang;
+    parent.add(pivot);
+    pivots.push(pivot);
+    baseAng.push(s.ang);
+
+    // tapered segment
+    const geo = new THREE.CylinderGeometry(s.r1, s.r0, s.len, 9, 1, false);
+    geo.rotateZ(-Math.PI / 2);
+    geo.translate(s.len / 2, 0, 0);
+    const mesh = new THREE.Mesh(geo, matLeg);
+    mesh.name = prefix + '_' + s.name;
+    mesh.castShadow = true;
+    mesh.receiveShadow = true;
+    pivot.add(mesh);
+
+    // joint ball
+    if (i > 0) {
+      const j = new THREE.Mesh(jointGeo, matJoint);
+      j.scale.setScalar(s.r0 * 1.14);
+      j.castShadow = true;
+      pivot.add(j);
+    }
+
+    // leg setae on femur + tibia
+    if (s.name === 'FEMUR' || s.name === 'TIBIA') {
+      addLegSetae(pivot, s.len, s.r0, 10);
+    }
+
+    const next = new THREE.Group();
+    next.position.x = s.len;
+    pivot.add(next);
+    parent = next;
+  }
+
+  // TARSAL_CLAWS
+  if (options.claws !== false) {
+    for (const k of [-1, 1]) {
+      const claw = new THREE.Mesh(new THREE.ConeGeometry(0.014, 0.075, 8), matDark);
+      claw.name = prefix + '_TARSAL_CLAW';
+      claw.position.set(0.03, k * 0.018, 0);
+      claw.rotation.z = -Math.PI / 2 - 0.5;
+      claw.rotation.x = k * 0.5;
+      parent.add(claw);
+    }
+  }
+
+  return { root, pivots, baseAng, tip: parent };
+}
+
+function addLegSetae(pivot, len, r, count) {
+  const geo = new THREE.ConeGeometry(0.005, 0.052, 4, 1, true);
+  geo.translate(0, 0.026, 0);
+  const im = new THREE.InstancedMesh(geo, matSeta, count);
+  const dummy = new THREE.Object3D();
+  const up = new THREE.Vector3(0, 1, 0);
+
+  for (let i = 0; i < count; i++) {
+    const x = len * (0.08 + 0.86 * Math.random());
+    const a = Math.random() * Math.PI * 2;
+    const dir = new THREE.Vector3(0, Math.cos(a), Math.sin(a)).normalize();
+    dummy.position.set(x, 0, 0).addScaledVector(dir, r * 0.85);
+    dummy.quaternion.setFromUnitVectors(up, dir);
+    dummy.rotateZ((Math.random() - 0.5) * 0.5);
+    dummy.scale.setScalar(0.6 + Math.random() * 0.7);
+    dummy.updateMatrix();
+    im.setMatrixAt(i, dummy.matrix);
+  }
+  im.instanceMatrix.needsUpdate = true;
+  pivot.add(im);
+}
+
+/* ------------------------------------------------------------------ */
+/* THE 8 LEGS                                                          */
+/* ------------------------------------------------------------------ */
+const HIP_X = 0.30;
+const LEG_LAYOUT = [
+  // name, hipZ,  yaw(right, rad), phase
+  ['L1',  0.52, -0.87, 0.00],
+  ['L2',  0.22, -0.31, 0.50],
+  ['L3', -0.08,  0.31, 0.00],
+  ['L4', -0.34,  0.87, 0.50]
+];
+
+const legs = [];
+
+for (const [name, hz, yaw, phase] of LEG_LAYOUT) {
+  for (const side of [1, -1]) {          // 1 = right, -1 = left
+    const tag = (side > 0 ? 'R' : 'L') + name.slice(1);
+    const limb = buildLimb(LEG_SEGMENTS, tag);
+
+    limb.root.position.set(side * HIP_X, BODY_Y, hz);
+
+    // right legs: yaw measured from +X;  left legs mirrored
+    const baseYaw = side > 0 ? yaw : Math.PI - yaw;
+    limb.root.rotation.y = baseYaw;
+
+    body.add(limb.root);
+
+    legs.push({
+      root: limb.root,
+      pivots: limb.pivots,
+      baseAng: limb.baseAng,
+      baseYaw,
+      side,
+      phase
+    });
+  }
+}
+
+/* ------------------------------------------------------------------ */
+/* PEDIPALPS (6 segments, forward-reaching, no claws)                  */
+/* ------------------------------------------------------------------ */
+const PALP_SEGMENTS = [
+  { name: 'COXA',       len: 0.12, r0: 0.070, r1: 0.064, ang: -0.15 },
+  { name: 'TROCHANTER', len: 0.09, r0: 0.064, r1: 0.060, ang: -0.25 },
+  { name: 'FEMUR',      len: 0.30, r0: 0.060, r1: 0.050, ang:  0.55 },
+  { name: 'PATELLA',    len: 0.14, r0: 0.050, r1: 0.046, ang: -0.25 },
+  { name: 'TIBIA',      len: 0.24, r0: 0.046, r1: 0.036, ang: -0.60 },
+  { name: 'TARSUS',     len: 0.18, r0: 0.036, r1: 0.026, ang:  0.45 }
+];
+
+for (const side of [1, -1]) {
+  const palp = buildLimb(PALP_SEGMENTS, (side > 0 ? 'R' : 'L') + 'PALP', { claws: false });
+  palp.root.position.set(side * 0.215, BODY_Y - 0.055, 0.60);
+  palp.root.rotation.y = side > 0 ? -1.32 : Math.PI + 1.32;
+  body.add(palp.root);
+
+  // PEDIPALP_tip — small bulb
+  const tip = new THREE.Mesh(new THREE.SphereGeometry(0.045, 12, 10), matDark);
+  tip.name = (side > 0 ? 'R' : 'L') + 'PEDIPALP_tip';
+  tip.position.set(0.185, 0, 0);
+  palp.tip.add(tip);
+}
+
+/* ------------------------------------------------------------------ */
+/* ORBIT CONTROLS                                                      */
+/* ------------------------------------------------------------------ */
+const controls = new OrbitControls(camera, canvas);
+controls.enableDamping = true;
+controls.dampingFactor = 0.075;
+controls.rotateSpeed = 0.85;
+controls.panSpeed = 0.8;
+controls.zoomSpeed = 0.9;
+controls.minDistance = 2.0;
+controls.maxDistance = 16;
+controls.maxPolarAngle = Math.PI * 0.495;
+controls.target.set(0, 0.55, -0.35);
+
+/* ------------------------------------------------------------------ */
+/* VIEW PRESETS                                                        */
+/* ------------------------------------------------------------------ */
+const VIEW_OFFSETS = {
+  three: new THREE.Vector3(4.6, 3.4, 5.2),
+  top:   new THREE.Vector3(0.02, 7.4, 0.02),
+  front: new THREE.Vector3(0, 1.7, 7.2),
+  rear:  new THREE.Vector3(0, 1.7, -7.2),
+  left:  new THREE.Vector3(-7.2, 1.7, 0),
+  right: new THREE.Vector3(7.2, 1.7, 0)
+};
+
+let tweenOffset = null;
+
+function applyView(name) {
+  const off = VIEW_OFFSETS[name];
+  if (!off) return;
+  tweenOffset = off.clone();
+  document.querySelectorAll('[data-view]').forEach(b => {
+    b.classList.toggle('active', b.dataset.view === name);
+  });
+}
+
+document.querySelectorAll('[data-view]').forEach(btn => {
+  btn.addEventListener('click', () => applyView(btn.dataset.view));
+});
+
+/* ------------------------------------------------------------------ */
+/* UI                                                                  */
+/* ------------------------------------------------------------------ */
+let paused = false;
+let speedMul = 1;
+
+const walkBtn = document.getElementById('walkBtn');
+walkBtn.addEventListener('click', () => {
+  paused = !paused;
+  walkBtn.textContent = paused ? '▶ RESUME WALK' : 'Ⅱ PAUSE WALK';
+  statusEl.classList.toggle('paused', paused);
+  statusText.textContent = paused ? 'PAUSED' : 'WALKING';
+});
+
+const speedInput = document.getElementById('speed');
+const speedValue = document.getElementById('speedValue');
+speedInput.addEventListener('input', () => {
+  speedMul = parseFloat(speedInput.value);
+  speedValue.textContent = speedMul.toFixed(1) + '×';
+});
+
+document.getElementById('resetBtn').addEventListener('click', () => applyView('three'));
+canvas.addEventListener('dblclick', () => applyView('three'));
+
+/* ------------------------------------------------------------------ */
+/* WANDER STATE                                                        */
+/* ------------------------------------------------------------------ */
+const ARENA = 3.2;
+let heading = 0.35;
+let gaitPhase = 0;
+let walkSpeed = 0.55;
+
+const followCentre = new THREE.Vector3(0, 0.55, -0.35);
+const tmpDelta = new THREE.Vector3();
+const tmpGoal = new THREE.Vector3();
+
+/* ------------------------------------------------------------------ */
+/* ANIMATION LOOP                                                      */
+/* ------------------------------------------------------------------ */
+const clock = new THREE.Clock();
+
+function animate() {
+  requestAnimationFrame(animate);
+
+  const dt = Math.min(clock.getDelta(), 0.05);
+  const t = clock.elapsedTime;
+
+  /* ---- wander ---------------------------------------------------- */
+  if (!paused) {
+    const p = spider.position;
+    const r = Math.hypot(p.x, p.z);
+
+    let steer = Math.sin(t * 0.47) * 0.55 + Math.sin(t * 1.13) * 0.25;
+    if (r > ARENA * 0.62) {
+      const toCentre = Math.atan2(-p.x, -p.z);
+      let d = ((toCentre - heading + Math.PI * 3) % (Math.PI * 2)) - Math.PI;
+      steer += d * 2.6;
+    }
+    heading += steer * dt * 1.25;
+
+    const sp = walkSpeed * speedMul;
+    spider.position.x += Math.sin(heading) * sp * dt;
+    spider.position.z += Math.cos(heading) * sp * dt;
+    spider.rotation.y = heading;
+
+    gaitPhase += sp * dt * 5.0;
+  }
+
+  /* ---- legs ------------------------------------------------------ */
+  const amp = paused ? 0 : 1;
+  for (const leg of legs) {
+    const ph = gaitPhase + leg.phase * Math.PI * 2;
+    const s = Math.sin(ph);
+    const c = Math.cos(ph);
+
+    // horizontal swing
+    leg.root.rotation.y = leg.baseYaw + (leg.side > 0 ? -1 : 1) * 0.17 * s * amp;
+
+    // femur lift (only while the leg is swinging forward)
+    const lift = Math.max(0, c);
+    leg.pivots[2].rotation.z = leg.baseAng[2] + lift * 0.42 * amp;
+    leg.pivots[4].rotation.z = leg.baseAng[4] - lift * 0.30 * amp;
+    leg.pivots[5].rotation.z = leg.baseAng[5] + lift * 0.18 * amp;
+  }
+
+  /* ---- body bob -------------------------------------------------- */
+  const bob = paused ? 0 : 1;
+  body.position.y = Math.sin(gaitPhase * 2) * 0.013 * bob;
+  body.rotation.z = Math.sin(gaitPhase) * 0.014 * bob;
+  body.rotation.x = Math.sin(gaitPhase * 2 + 1.1) * 0.010 * bob;
+
+  /* ---- camera follow --------------------------------------------- */
+  followCentre.set(spider.position.x, 0.55, spider.position.z - 0.35);
+  tmpDelta.copy(followCentre).sub(controls.target).multiplyScalar(0.10);
+  controls.target.add(tmpDelta);
+  camera.position.add(tmpDelta);
+
+  controls.update();
+
+  /* ---- camera tween ---------------------------------------------- */
+  if (tweenOffset) {
+    tmpGoal.copy(controls.target).add(tweenOffset);
+    camera.position.lerp(tmpGoal, 0.14);
+    if (camera.position.distanceTo(tmpGoal) < 0.02) tweenOffset = null;
+  }
+
+  /* ---- ground follows nothing (fixed world) ---------------------- */
+  key.target.position.set(spider.position.x, 0, spider.position.z);
+  key.target.updateMatrixWorld();
+
+  renderer.render(scene, camera);
+}
+
+/* ------------------------------------------------------------------ */
+/* RESIZE + BOOT                                                       */
+/* ------------------------------------------------------------------ */
+addEventListener('resize', () => {
+  camera.aspect = window.innerWidth / window.innerHeight;
+  camera.updateProjectionMatrix();
+  renderer.setSize(window.innerWidth, window.innerHeight);
+});
+
+statusText.textContent = 'WALKING';
+applyView('three');
+
+animate();
+
+setTimeout(() => loadingEl.classList.add('hidden'), 320);
+
+}
+</script>
+</body>
+</html>

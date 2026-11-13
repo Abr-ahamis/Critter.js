@@ -1,0 +1,285 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="theme-color" content="#f5f2eb">
+<title>Crawlers — a digital creature living in your browser</title>
+<style>
+:root{--paper:#f5f2eb;--paper2:#ebe6dc;--ink:#24231f;--muted:#79766d;--line:#d9d2c5;--accent:#ad713a;--accent-soft:#ead4b6;--serif:Georgia,"Times New Roman",serif;--sans:Inter,ui-sans-serif,system-ui,-apple-system,"Segoe UI",sans-serif}
+*{box-sizing:border-box}
+html{scroll-behavior:smooth;background:var(--paper)}
+body{margin:0;background:var(--paper);color:var(--ink);font:16px/1.7 var(--sans);overflow-x:hidden}
+#crawler-layer{position:fixed!important;inset:0!important;width:100vw!important;height:100vh!important;z-index:2147483647!important;pointer-events:none!important;display:block!important;background:transparent!important}
+.site{position:relative;z-index:1;width:min(1120px,calc(100% - 64px));margin:0 auto;padding:38px 0 90px}
+.masthead{display:flex;justify-content:space-between;align-items:center;border-bottom:1px solid var(--line);padding-bottom:15px;color:var(--muted);font:11px/1.3 ui-monospace,SFMono-Regular,Consolas,monospace;letter-spacing:.13em;text-transform:uppercase}
+.masthead .mark{color:var(--accent);font-weight:700}
+.hero{padding:76px 0 56px;max-width:850px}
+.kicker{font:11px/1.4 ui-monospace,SFMono-Regular,Consolas,monospace;letter-spacing:.16em;text-transform:uppercase;color:var(--accent);margin:0 0 18px}
+h1,h2,h3{font-family:var(--serif);font-weight:400;letter-spacing:-.035em}
+h1{font-size:clamp(44px,7vw,84px);line-height:.98;margin:0 0 26px;max-width:850px}
+.dek{font:clamp(19px,2vw,23px)/1.55 var(--serif);color:#625c50;max-width:720px;margin:0}
+.meta{display:flex;gap:18px;flex-wrap:wrap;margin-top:26px;color:var(--muted);font:10px ui-monospace,SFMono-Regular,Consolas,monospace;letter-spacing:.09em;text-transform:uppercase}
+.layout{display:grid;grid-template-columns:minmax(0,760px) 230px;gap:74px;align-items:start;border-top:1px solid var(--line);padding-top:44px}
+article{min-width:0}
+article h2{font-size:34px;line-height:1.1;margin:50px 0 18px}
+article h2:first-child{margin-top:0}
+article h3{font-size:24px;line-height:1.2;margin:34px 0 12px}
+article p{margin:0 0 21px;font-size:16px;line-height:1.9;color:#37352f}
+article .lead{font:21px/1.65 var(--serif);color:#575044}
+article blockquote{margin:35px 0;padding:4px 0 4px 22px;border-left:2px solid #bd8a55;font:21px/1.55 var(--serif);color:#605443}
+article ol{padding-left:23px;margin:10px 0 28px}article li{padding:5px 0 8px 7px;line-height:1.75}
+article a{color:#8a5429;text-decoration-thickness:1px;text-underline-offset:3px}
+aside{position:sticky;top:35px;padding:19px 0 0;border-top:2px solid #b98a58;color:#777164;font-size:12px;line-height:1.7}
+aside h3{font:11px ui-monospace,SFMono-Regular,Consolas,monospace;letter-spacing:.12em;text-transform:uppercase;color:#514b40;margin:0 0 12px}
+aside p{margin:0 0 19px}
+aside .note{padding:14px 15px;background:#eee8dd;border:1px solid #e1d8c9;border-radius:4px;color:#696154}
+.rule{height:1px;background:var(--line);margin:44px 0}
+.references{font-size:13px;color:#686257}.references p{font-size:13px;line-height:1.65;margin-bottom:12px}
+.footer{margin-top:78px;padding-top:19px;border-top:1px solid var(--line);display:flex;justify-content:space-between;gap:16px;color:#827d72;font:10px ui-monospace,SFMono-Regular,Consolas,monospace;letter-spacing:.08em;text-transform:uppercase}
+.crawl-word{transition:color .16s ease,background-color .16s ease,text-shadow .16s ease;border-radius:2px;position:relative}
+.crawl-word.crawler-stepped{color:#9b5e27!important;background:linear-gradient(transparent 61%,rgba(207,151,83,.30) 61%);text-shadow:0 0 9px rgba(202,142,75,.18)}
+@media(max-width:850px){.site{width:min(720px,calc(100% - 38px));padding-top:24px}.layout{grid-template-columns:1fr;gap:36px}.layout aside{position:static;display:grid;grid-template-columns:1fr 1fr;gap:20px;border-top:1px solid var(--line);padding-top:20px}.layout aside h3{grid-column:1/-1}}
+@media(max-width:520px){.site{width:calc(100% - 34px)}.hero{padding:55px 0 40px}article h2{font-size:29px;margin-top:39px}article p{font-size:15px}.layout aside{display:block}.masthead{font-size:9px}.meta{gap:10px}}
+@media(prefers-reduced-motion:reduce){html{scroll-behavior:auto}.crawl-word{transition:none}}
+
+/* Universal foot-contact feedback for words and non-text page elements. */
+.crawler-word{transition:color .14s ease,text-shadow .14s ease}
+.crawler-word.crawler-touched{color:#a75e22!important;text-shadow:0 0 .5em rgba(200,135,65,.36)}
+.crawler-contacted{outline:1px solid rgba(171,105,48,.7)!important;outline-offset:2px!important;box-shadow:0 0 0 2px rgba(210,157,92,.18),0 2px 12px rgba(134,82,34,.20)!important;transition:outline-color .12s ease,box-shadow .12s ease!important}
+
+
+::highlight(crawler-foot-word){color:#a75e22;text-shadow:0 0 .48em rgba(200,135,65,.34)}
+</style>
+</head>
+<body>
+<canvas id="crawler-layer" aria-hidden="true"></canvas>
+<div class="site" id="readable-content">
+ <header class="masthead"><span class="mark">CRAWLERS / FIELD NOTES</span><span>Digital organisms · Issue 01</span></header>
+ <section class="hero">
+  <p class="kicker">Digital creature living in your browser</p>
+  <h1>A small life<br>on the surface of the web.</h1>
+  <p class="dek">A kinetic, interactive creature moves through this page as if the words were terrain. It follows a pointer, tests its footing, crosses lines of text, and leaves brief traces where its feet land.</p>
+  <div class="meta"><span>Interactive study</span><span>Ten articulated limbs</span><span>Browser-native environment</span></div>
+ </section>
+ <div class="layout">
+  <article>
+   <h2>Digital creature living in your browser</h2>
+   <p class="lead">Crawlers is a kinetic, interactive work with feedback loops operating on multiple levels. Its motion system combines algorithmic and nature-inspired distributed models, inviting viewers to explore the underlying mechanisms. Its visual language reflects a similar balance: points, squares, and circles combine rigid technical expression with dynamic, lifelike movement.</p>
+   <p>The creature is rendered as a small three-dimensional organism above an ordinary two-dimensional document. The page remains readable and scrollable beneath it. Its body has volume, a visible carapace, a rounded abdomen, articulated joints, surface hairs, and a warm pattern of amber, caramel, cream, and espresso brown. The ten-limbed form is an artistic extension of a spider-inspired crawler, not a claim that the biological Black House Spider has ten walking legs.</p>
+   <p>Interaction with the page attempts to blur the boundaries between the artwork and the viewer, while also reflecting on contemporary questions surrounding web crawlers, bots, and data collection. Page generation introduces a simple generative system, a stripped-down language-model predictor, offering viewers an opportunity to experience machine learning at its core.</p>
+   <blockquote>What happens when a digital object behaves as though the page beneath it were a physical world?</blockquote>
+   <h2>Movement as a distributed system</h2>
+   <p>The crawler does not travel along a single rigid animation path. Its limbs move in offset phases. Some feet remain planted while others lift, reach, and touch down. The body follows the changing direction of travel with a small delay, creating the impression that the legs coordinate locally rather than obeying one perfectly synchronized command.</p>
+   <p>When a foot lands, the crawler briefly marks the word or page element beneath it. Text takes on a warm copper color; images, controls, icons and other elements receive a subtle contact outline. The page remains ordinary HTML, but the crawler treats its visible DOM as terrain. The cursor becomes another environmental signal. Move it across the page and the creature will investigate; leave it alone and it resumes exploring the nearby text.</p>
+   <h3>Contact, friction, and attention</h3>
+   <p>Each leg has a proximal attachment, a stout upper section, a compact knee-like transition, a longer middle section, and progressively finer distal segments. Its joints bend independently to suggest weight transfer. The planted feet are spread away from the body to create a broad support polygon, while the lifted feet arc forward before touching down again.</p>
+   <p>The body is free to turn, lean, climb sideways, and briefly invert. These gestures do not change the document itself; they change the creature's orientation relative to the page. In a larger installation, the same surface-following logic could be extended to cards, images, navigation regions, page edges, and other elements in a site's DOM.</p>
+   <h2>On the boundary between organism and interface</h2>
+   <p>In the age of AI agents, we increasingly find ourselves personifying probabilistic algorithms. The work invites us to reflect on this tendency and consider deeper questions about what is alive, what is not, and what we are. How are we different from machines?</p>
+   <p>A browser crawler is not alive. It has no metabolism, nervous system, or independent intention. Yet a moving body with pauses, corrections, exploratory gestures, and a response to touch can prompt us to attribute intention to it. The experience sits between a biological metaphor and a procedural system.</p>
+   <h2>How to interact with your crawler</h2>
+   <h3>1. Wake it up</h3>
+   <p>Move your pointer through the article. The crawler notices recent motion and approaches the pointer. It does not block clicks, text selection, or scrolling, so the document remains a normal webpage while the creature moves above it.</p>
+   <h3>2. Let it explore</h3>
+   <p>Stop moving the pointer. The creature will select nearby words and travel from one text region to another. Watch the feet: planted legs spread outward to support the body, while lifted legs reach forward and settle onto a new point.</p>
+   <h3>3. Change the terrain</h3>
+   <p>Scroll the page. The text moves in two dimensions while the crawler remains a three-dimensional object in the browser's viewing space. Its target positions are recalculated from the visible document, so it can continue walking over new paragraphs as they enter the viewport.</p>
+   <h3>4. Watch it climb and hang</h3>
+   <p>From time to time the crawler changes its body roll and leg posture. It leans as though crossing a vertical edge, turns onto its side, and briefly hangs inverted before returning to its ordinary walking orientation. The animation is a visual surface-walking study rather than a biomechanically validated simulation of every possible spider gait.</p>
+   <div class="rule"></div>
+   <h2>References</h2>
+   <div class="references">
+    <p>[1] Ijspeert, A. J., Crespi, A., Ryczko, D., and Cabelguen, J.-M. (2007). From swimming to walking with a salamander robot driven by a spinal cord model. <em>Science</em>, 315(5817), 1416–1420.</p>
+    <p>[2] Owaki, D., Goda, M., Miyazawa, S., and Ishiguro, A. (2017). A minimal model describing hexapedal interlimb coordination: The Tegotae-based approach. <em>Frontiers in Neurorobotics</em>, 11, 29.</p>
+    <p>[3] Australian Museum. Black House Spider, <em>Badumna insignis</em>. Species identification and external appearance reference.</p>
+    <p>[4] Museums Victoria. <em>Badumna insignis</em>. Collection-based species description.</p>
+   </div>
+  </article>
+  <aside>
+   <h3>Field observation</h3>
+   <p>The crawler is intentionally small compared with the page. The article remains the primary visual layer; the creature is a visitor, not a replacement for the content.</p>
+   <div class="note"><strong>Look closely</strong><br>Ten legs move in staggered phases. Watch for a planted stance, a lifted reach, and short copper flashes where feet contact words.</div>
+   <p style="margin-top:22px">The page text is 2D HTML. The crawler is a 3D mesh rendered in a transparent canvas above it.</p>
+  </aside>
+ </div>
+ <footer class="footer"><span>Crawlers / browser study</span><span>One page · many surfaces</span></footer>
+</div>
+<script>
+(()=>{
+'use strict';
+const canvas=document.getElementById('crawler-layer');
+function startCanvasFallback(){
+ const ctx=canvas.getContext('2d',{alpha:true});
+ if(!ctx){console.error('Crawler: Canvas 2D is unavailable.');return;}
+ canvas.style.cssText='position:fixed!important;inset:0!important;width:100vw!important;height:100vh!important;display:block!important;z-index:2147483647!important;pointer-events:none!important;background:transparent!important;';
+ const PI=Math.PI,TAU=PI*2;
+ const state={x:innerWidth*.55,y:innerHeight*.42,vx:0,vy:0,heading:0,gait:0,roll:0,pitch:0,zoom:1};window.__CRAWLER_DEBUG_STATE__=state;
+ const pointer={x:innerWidth*.5,y:innerHeight*.45,last:0,seen:false};window.__CRAWLER_POINTER_STATE__=pointer;
+ const camera={yaw:-.16,elev:.78};
+ let last=0,wanderAt=0,wanderTarget=null,dpr=1,lastBodyContact=0,textHighlightTimer=null;
+ const previousSwing=new Map(),lastTouch=new Map(),timedClasses=new Map();
+ const colors={dark:'#4a2c1d',dark2:'#2e2018',tan:'#c89452',gold:'#ddb56f',pale:'#ead8ad',hair:'#e1d9c9',rust:'#9a6739'};
+ const noTouch='html,body,script,style,noscript,canvas,svg path';
+ function resize(){dpr=Math.min(2,window.devicePixelRatio||1);const w=Math.max(1,Math.round(innerWidth*dpr)),h=Math.max(1,Math.round(innerHeight*dpr));if(canvas.width!==w||canvas.height!==h){canvas.width=w;canvas.height=h;}ctx.setTransform(dpr,0,0,dpr,0,0);}
+ function highlightWordAt(x,y){
+  try{
+   let range=document.caretRangeFromPoint?document.caretRangeFromPoint(x,y):null;
+   if(!range&&document.caretPositionFromPoint){const pos=document.caretPositionFromPoint(x,y);if(pos){range=document.createRange();range.setStart(pos.offsetNode,pos.offset);range.collapse(true);}}
+   if(!range||range.startContainer.nodeType!==Node.TEXT_NODE)return false;
+   const node=range.startContainer,text=node.nodeValue||'';let a=range.startOffset,b=range.startOffset;
+   const wordChar=c=>/[\p{L}\p{N}_'’-]/u.test(c||'');
+   if(!wordChar(text[a])&&a>0&&wordChar(text[a-1]))a--;
+   while(a>0&&wordChar(text[a-1]))a--;while(b<text.length&&wordChar(text[b]))b++;
+   if(a===b)return false;
+   const wordRange=document.createRange();wordRange.setStart(node,a);wordRange.setEnd(node,b);
+   if(window.CSS&&CSS.highlights&&window.Highlight){CSS.highlights.set('crawler-foot-word',new Highlight(wordRange));if(textHighlightTimer)clearTimeout(textHighlightTimer);textHighlightTimer=setTimeout(()=>CSS.highlights.delete('crawler-foot-word'),650);return true;}
+  }catch(e){}
+  return false;
+ }
+ function addContactClass(el,cls,duration=620){if(!el||!el.classList)return;el.classList.add(cls);const old=timedClasses.get(el);if(old)clearTimeout(old);timedClasses.set(el,setTimeout(()=>{el.classList.remove(cls);timedClasses.delete(el);},duration));}
+ function touchAt(x,y,key,now){const prev=lastTouch.get(key)||0;if(now-prev<165)return;lastTouch.set(key,now);
+  const textHit=highlightWordAt(x,y);
+  const stack=(document.elementsFromPoint?document.elementsFromPoint(x,y):[document.elementFromPoint(x,y)]).filter(Boolean).filter(el=>el!==canvas&&!el.matches?.(noTouch));
+  let element=null;
+  const interactive='a,button,input,textarea,select,label,summary,details,[role],img,video,figure,svg,canvas,form';
+  for(const el of stack){if(el===document.body||el===document.documentElement)continue;let candidate=el.closest?.(interactive);if(!candidate&&!textHit&&el.matches?.('p,h1,h2,h3,h4,li,blockquote,figure,img,video,svg'))candidate=el;if(!candidate&&el instanceof HTMLElement&&el.tagName==='DIV'){const r=el.getBoundingClientRect(),area=r.width*r.height;if(area>120&&area<150000&&r.height<460)candidate=el;}if(candidate&&candidate!==canvas&&!candidate.matches?.('script,style,noscript')){element=candidate;break;}}
+  if(element)addContactClass(element,'crawler-contacted',620);
+ }
+ function chooseWander(){
+  const candidates=[...document.querySelectorAll('h1,h2,h3,p,a,button,input,textarea,select,img,svg,figure,video,li,section,article,[role],[contenteditable="true"]')];
+  const visible=candidates.filter(el=>{const r=el.getBoundingClientRect(),s=getComputedStyle(el);return r.width>8&&r.height>8&&r.bottom>30&&r.top<innerHeight-30&&r.right>20&&r.left<innerWidth-20&&s.visibility!=='hidden'&&s.display!=='none';});
+  if(visible.length){const el=visible[Math.floor(Math.random()*visible.length)],r=el.getBoundingClientRect();return {x:Math.max(28,Math.min(innerWidth-28,r.left+r.width*(.25+Math.random()*.5))),y:Math.max(28,Math.min(innerHeight-28,r.top+r.height*(.25+Math.random()*.5)))};}
+  return {x:innerWidth*(.18+Math.random()*.64),y:innerHeight*(.18+Math.random()*.64)};
+ }
+ function localProject(x,y,z){
+  // Body pose: pitch and roll let the crawler lean around rectangular DOM surfaces.
+  const cp=Math.cos(state.pitch),sp=Math.sin(state.pitch),cr=Math.cos(state.roll),sr=Math.sin(state.roll);
+  const py=y*cp-z*sp,pz=y*sp+z*cp,px=x*cr-py*sr,py2=x*sr+py*cr;
+  const ch=Math.cos(state.heading),sh=Math.sin(state.heading),wx=ch*px+sh*pz,wz=-sh*px+ch*pz;
+  const cy=Math.cos(camera.yaw),sy=Math.sin(camera.yaw),sx=wx*cy-wz*sy,depth=wx*sy+wz*cy;
+  const elev= Math.sin(camera.elev), ce=Math.cos(camera.elev);
+  return {x:state.x+sx*state.zoom,y:state.y+(depth*elev-py2*ce)*state.zoom,depth};
+ }
+ function line3(points,color,width,alpha=1){ctx.save();ctx.globalAlpha=alpha;ctx.strokeStyle=color;ctx.lineWidth=width*state.zoom;ctx.lineCap='round';ctx.lineJoin='round';ctx.beginPath();points.forEach((p,i)=>{const q=localProject(...p);if(i)ctx.lineTo(q.x,q.y);else ctx.moveTo(q.x,q.y);});ctx.stroke();ctx.restore();}
+ function circleAt(p,r,fill,stroke=null,sw=.5){const q=localProject(...p);ctx.save();ctx.beginPath();ctx.arc(q.x,q.y,Math.max(.2,r*state.zoom),0,TAU);ctx.fillStyle=fill;ctx.fill();if(stroke){ctx.strokeStyle=stroke;ctx.lineWidth=sw*state.zoom;ctx.stroke();}ctx.restore();}
+ function bodyEllipse(z0,rx,ry,rz,y0){
+  const pts=[];for(let i=0;i<=64;i++){const a=i/64*TAU;pts.push(localProject(rx*Math.cos(a),y0-ry*Math.sin(a),z0+rz*Math.sin(a)));}
+  ctx.beginPath();pts.forEach((p,i)=>{if(i)ctx.lineTo(p.x,p.y);else ctx.moveTo(p.x,p.y);});ctx.closePath();return pts;
+ }
+ function fillBody(z0,rx,ry,rz,y0,base,edge,highlight){
+  const pts=bodyEllipse(z0,rx,ry,rz,y0),cx=pts.reduce((a,p)=>a+p.x,0)/pts.length,cy=pts.reduce((a,p)=>a+p.y,0)/pts.length;
+  const path=()=>{ctx.beginPath();pts.forEach((p,i)=>{if(i)ctx.lineTo(p.x,p.y);else ctx.moveTo(p.x,p.y);});ctx.closePath();};
+  path();const g=ctx.createRadialGradient(cx-rx*.24,cy-ry*.35,1,cx,cy,Math.max(rx,rz)*1.35*state.zoom);g.addColorStop(0,highlight);g.addColorStop(.48,base);g.addColorStop(1,edge);ctx.fillStyle=g;ctx.fill();ctx.strokeStyle='#50331f';ctx.lineWidth=1.05*state.zoom;ctx.stroke();
+  return path;
+ }
+ function clippedMarks(path,draw){ctx.save();path();ctx.clip();draw();ctx.restore();}
+ function drawSegment(a,b,kind,legIndex,segIndex){
+  const p=localProject(...a),q=localProject(...b),dx=q.x-p.x,dy=q.y-p.y,len=Math.hypot(dx,dy)||1,nx=-dy/len,ny=dx/len;
+  const widths=[1.30,1.15,2.00,1.72,1.68,1.30,.95],w=widths[segIndex]*state.zoom;
+  const bases=['#a97640','#c18a49','#d0a05b','#dfbd7c','#c99650','#b17b42','#956138'];
+  ctx.save();ctx.lineCap='round';ctx.lineJoin='round';ctx.strokeStyle='#42291c';ctx.lineWidth=w+1.15*state.zoom;ctx.beginPath();ctx.moveTo(p.x,p.y);ctx.lineTo(q.x,q.y);ctx.stroke();
+  const grad=ctx.createLinearGradient(p.x+nx*w,p.y+ny*w,q.x-nx*w,q.y-ny*w);grad.addColorStop(0,'#654027');grad.addColorStop(.28,bases[segIndex]);grad.addColorStop(.68,segIndex===3||segIndex===4?'#e0bd7b':'#d8ad69');grad.addColorStop(1,'#694027');ctx.strokeStyle=grad;ctx.lineWidth=w;ctx.beginPath();ctx.moveTo(p.x,p.y);ctx.lineTo(q.x,q.y);ctx.stroke();
+  ctx.globalAlpha=.48;ctx.strokeStyle='#f4dfb9';ctx.lineWidth=Math.max(.28,w*.18);ctx.beginPath();ctx.moveTo(p.x+nx*w*.25,p.y+ny*w*.25);ctx.lineTo(q.x+nx*w*.25,q.y+ny*w*.25);ctx.stroke();ctx.globalAlpha=1;
+  // Dark annular bands on femur and middle segments.
+  const bands=segIndex===2?[.22,.57,.82]:(segIndex===3||segIndex===4?[.25,.72]:[]);
+  for(const t of bands){const x=p.x+dx*t,y=p.y+dy*t;ctx.strokeStyle='#4b2b1b';ctx.lineWidth=Math.max(.55,w*.28);ctx.beginPath();ctx.moveTo(x-nx*w*.58,y-ny*w*.58);ctx.lineTo(x+nx*w*.58,y+ny*w*.58);ctx.stroke();}
+  // Small dark speckles, spines and translucent setae along every segment.
+  for(let j=0;j<2;j++){const t=.30+j*.38,x=p.x+dx*t,y=p.y+dy*t;const side=((legIndex+segIndex+j)%2?1:-1);ctx.strokeStyle='#422619';ctx.lineWidth=.58*state.zoom;ctx.beginPath();ctx.moveTo(x+nx*w*.26,y+ny*w*.26);ctx.lineTo(x+nx*(w*.26+2.4*side*state.zoom),y+ny*(w*.26+2.4*side*state.zoom)+1.1*state.zoom);ctx.stroke();ctx.strokeStyle='rgba(238,231,215,.82)';ctx.lineWidth=.38*state.zoom;ctx.beginPath();ctx.moveTo(x-nx*w*.18,y-ny*w*.18);ctx.lineTo(x-nx*(w*.18+1.7*state.zoom),y-ny*(w*.18+1.7*state.zoom)-.9*state.zoom);ctx.stroke();}
+  ctx.restore();
+ }
+ function drawJoint(p,rad){circleAt(p,rad+1,'#4a2d1e');circleAt(p,rad*.66,'#be9258','#ead3a5',.42);circleAt([p[0],p[1]+.55,p[2]],rad*.25,'#5b381f');}
+ const legDefs=[];for(let pair=0;pair<5;pair++)for(const side of [-1,1])legDefs.push({pair,side,id:(side<0?'L':'R')+(pair+1)});
+ function legPoints(leg){
+  const {pair,side}=leg,z0=[12,6,0,-6,-12][pair],phase=state.gait+pair*1.04+(side>0?PI:0),swing=Math.max(0,Math.sin(phase)),stride=Math.cos(phase)*3.2;
+  const s=side;return {phase,swing,pts:[
+   [s*4.6,4.7,z0],
+   [s*6.5,5.0,z0+.3],
+   [s*9.1,5.7,z0+.65],
+   [s*13.2,8.0,z0+1.3],
+   [s*14.8,7.1,z0+2.3],
+   [s*16.0,3.7,z0+4.4],
+   [s*19.5,1.0+swing*3.2,z0+7.0+stride],
+   [s*21.0,.20+swing*3.2,z0+8.4+stride]
+  ]};
+ }
+ function drawLeg(leg,index,contactNow){
+  const data=legPoints(leg),p=data.pts;for(let k=0;k<7;k++)drawSegment(p[k],p[k+1],k,index,k);
+  for(let k=1;k<7;k++)drawJoint(p[k],k===3?1.55:k===4?1.35:.95);
+  // Tiny paired terminal claws.
+  const tip=p[7];line3([[tip[0],tip[1],tip[2]],[tip[0]+leg.side*1.1,tip[1]-.35,tip[2]+1.2]],'#4b2c1c',.62);
+  line3([[tip[0],tip[1],tip[2]],[tip[0]-leg.side*.65,tip[1]-.25,tip[2]+1.0]],'#4b2c1c',.55);
+  const was=previousSwing.get(leg.id),isSwing=data.swing>.15;if(was&&!isSwing){const ground=localProject(tip[0],.2,tip[2]);touchAt(ground.x,ground.y,leg.id,contactNow);}previousSwing.set(leg.id,isSwing);
+ }
+ function drawBody(){
+  // Soft contact shadow.
+  const sh=localProject(0,0,-1);ctx.save();const grad=ctx.createRadialGradient(sh.x,sh.y,1,sh.x,sh.y,27*state.zoom);grad.addColorStop(0,'rgba(39,27,18,.22)');grad.addColorStop(1,'rgba(39,27,18,0)');ctx.fillStyle=grad;ctx.beginPath();ctx.ellipse(sh.x,sh.y,27*state.zoom,11*state.zoom,0,0,TAU);ctx.fill();ctx.restore();
+  // Abdomen, pedicel and cephalothorax.
+  const abdomenPath=fillBody(-9.2,7.7,4.4,10.2,4.5,'#b9905e','#4c3425','#ead6b0');
+  clippedMarks(abdomenPath,()=>{
+   // Anterior dorsal band.
+   line3([[0,8.45,-2],[0,8.5,-5],[0,8.5,-8.2],[0,8.3,-10]],'#68452b',2.2,.92);
+   // Posterior paired backward-pointing chevrons.
+   for(let i=0;i<4;i++){const z=-8.0-i*2.2,w=3.5-i*.42;line3([[-w,8.25,z+1.2],[0,8.4,z-.2],[w,8.25,z+1.2]],'#523321',1.45,.94);}
+   for(let i=0;i<23;i++){const x=(Math.sin(i*17.31)*.5)*11,z=-9.2+(Math.cos(i*8.13)*.5)*15;if((x/7.5)**2+((z+9.2)/10.2)**2<.92)circleAt([x,8.25,z],.20+i%3*.045,i%3?'#70492d':'#49301f');}
+   // Golden-gray pubescence along the abdominal rim.
+   for(let i=0;i<24;i++){const a=i/24*TAU,x=7.25*Math.cos(a),z=-9.2+9.7*Math.sin(a);line3([[x,7.0,z],[x*1.07,7.15,z+(z+9.2)*.06]],i%2?'#c7b08a':'#e0d7c5',.42,.85);}
+  });
+  line3([[0,4.7,-1.5],[0,4.9,-3.7],[0,5.0,-5.4]],'#59402b',2.1);
+  const carapacePath=fillBody(6.3,5.8,3.1,7.4,5.0,'#8b5b32','#39251b','#d4ae73');
+  clippedMarks(carapacePath,()=>{
+   // Cream-edged pale median stripe and espresso lateral bands.
+   line3([[-1.75,7.9,12.6],[-1.65,8.0,8],[-1.5,8.0,3],[ -1.2,7.7,.1]],'#ead8ad',.72,.95);
+   line3([[1.75,7.9,12.6],[1.65,8.0,8],[1.5,8.0,3],[1.2,7.7,.1]],'#ead8ad',.72,.95);
+   line3([[0,8.0,12.6],[0,8.0,8],[0,8.0,3],[0,7.7,.1]],'#e4ca8c',2.65,1);
+   line3([[-4.35,7.7,11],[-3.9,7.9,6],[-3.5,7.6,1]],'#452a1c',1.65,.94);
+   line3([[4.35,7.7,11],[3.9,7.9,6],[3.5,7.6,1]],'#452a1c',1.65,.94);
+   for(let i=0;i<28;i++){const x=(Math.sin(i*14.8)*.5)*10,z=6.3+(Math.cos(i*5.9)*.5)*12;if((x/5.8)**2+((z-6.3)/7.4)**2<.9)circleAt([x,8,z],.15+i%2*.08,i%3?'#3e291d':'#aa7945');}
+   for(let i=0;i<18;i++){const a=i/18*TAU,x=5.5*Math.cos(a),z=6.3+7.1*Math.sin(a);line3([[x,6.6,z],[x*1.07,6.45,z]],i%2?'#ddd7cb':'#b7b9b2',.34,.86);}
+  });
+  // Eight eyes in two rows, kept small and spider-like.
+  const eyeX=[-3.55,-2.25,-.8,.8,2.25,3.55];
+  for(let i=0;i<4;i++)circleAt([[-3.0,-1.0,1.0,3.0][i],7.6,12.9],.66,'#160f0c','#51402f',.36);
+  for(let i=0;i<4;i++)circleAt([[-3.3,-1.1,1.1,3.3][i],7.6,11.6],.53,'#1b1310','#574333',.32);
+  // Gloss points on eyes.
+  for(const x of [-3,-1,1,3]){const q=localProject(x,8.15,13.15);ctx.fillStyle='rgba(255,255,255,.82)';ctx.beginPath();ctx.arc(q.x,q.y,.23*state.zoom,0,TAU);ctx.fill();}
+  // Chelicerae and pedipalps at the anterior face.
+  line3([[-1.15,5.5,13.1],[-1.05,4.2,15.0],[-.55,3.9,15.5]],'#674326',1.2);
+  line3([[1.15,5.5,13.1],[1.05,4.2,15.0],[.55,3.9,15.5]],'#674326',1.2);
+  line3([[-2.0,4.8,11.5],[-3.2,4.2,13.5],[-3.9,3.8,14.2]],'#9b7047',.92);
+  line3([[2.0,4.8,11.5],[3.2,4.2,13.5],[3.9,3.8,14.2]],'#9b7047',.92);
+ }
+ function targetElement(){const el=document.elementFromPoint(state.x,state.y);return el&&el.closest?el.closest('img,button,input,textarea,select,figure,video,canvas,[role],a,section,article,nav,aside,header,footer,div'):el;}
+ function adjustClimb(){
+  const el=targetElement();if(!el||el===canvas||el===document.body||el===document.documentElement){state.roll*=.92;state.pitch*=.92;return;}
+  const r=el.getBoundingClientRect(),margin=7;let rollTarget=0,pitchTarget=0;
+  // Simulated vertical-edge traversal on visible DOM boxes: tilt around a side/top lip.
+  if(r.width>32&&r.height>24){if(Math.abs(state.x-r.left)<margin)rollTarget=-.92;else if(Math.abs(state.x-r.right)<margin)rollTarget=.92;if(Math.abs(state.y-r.top)<margin)pitchTarget=-.58;else if(Math.abs(state.y-r.bottom)<margin)pitchTarget=1.18;}
+  state.roll+=(rollTarget-state.roll)*.08;state.pitch+=(pitchTarget-state.pitch)*.08;
+ }
+ function update(dt,now){
+  const pointerFresh=pointer.seen&&now-pointer.last<1800;let goal;
+  if(pointerFresh){goal={x:pointer.x+19,y:pointer.y+20};}
+  else{if(!wanderTarget||now>wanderAt||Math.hypot(wanderTarget.x-state.x,wanderTarget.y-state.y)<20){wanderTarget=chooseWander();wanderAt=now+1800+Math.random()*2200;}goal=wanderTarget;}
+  goal.x=Math.max(24,Math.min(innerWidth-24,goal.x));goal.y=Math.max(30,Math.min(innerHeight-30,goal.y));
+  const dx=goal.x-state.x,dy=goal.y-state.y,d=Math.hypot(dx,dy)||1,maxSpeed=pointerFresh?500:205,desired=Math.min(maxSpeed,d*3.0),wantX=dx/d*desired,wantY=dy/d*desired,acc=1-Math.exp(-12.5*dt);
+  state.vx+=(wantX-state.vx)*acc;state.vy+=(wantY-state.vy)*acc;state.x+=state.vx*dt;state.y+=state.vy*dt;
+  const speed=Math.hypot(state.vx,state.vy);if(speed>5){const h=Math.atan2(state.vx,state.vy);let delta=h-state.heading;while(delta>PI)delta-=TAU;while(delta<-PI)delta+=TAU;state.heading+=delta*(1-Math.exp(-6.5*dt));}
+  state.gait+=dt*(speed>7?8.4+Math.min(4,speed/80):1.5);state.zoom=Math.max(.72,Math.min(1.12,state.zoom));adjustClimb();
+ }
+ function render(now){requestAnimationFrame(render);const dt=last?Math.min(.04,(now-last)/1000):1/60;last=now;resize();update(dt,now);ctx.clearRect(0,0,innerWidth,innerHeight);
+  // Draw the far-side and rear legs first; the body then occludes their roots.
+  const legs=[...legDefs].sort((a,b)=>a.pair-b.pair||(a.side-b.side));for(let i=0;i<legs.length;i++)drawLeg(legs[i],i,now);
+  drawBody();if(now-lastBodyContact>480){touchAt(state.x,state.y,'body-contact',now);lastBodyContact=now;}
+ }
+ function onPointer(e){if(orbit){const dx=e.clientX-orbit.x,dy=e.clientY-orbit.y;orbit={x:e.clientX,y:e.clientY};camera.yaw-=dx*.006;camera.elev=Math.max(.22,Math.min(1.18,camera.elev+dy*.004));return;}pointer.x=e.clientX;pointer.y=e.clientY;pointer.last=performance.now();pointer.seen=true;}
+ let orbit=null;window.addEventListener('pointermove',onPointer,{passive:true});window.addEventListener('pointerdown',e=>{if(e.altKey&&e.button===0){orbit={x:e.clientX,y:e.clientY};e.preventDefault();}else onPointer(e);});window.addEventListener('pointerup',()=>orbit=null);window.addEventListener('pointercancel',()=>orbit=null);window.addEventListener('wheel',e=>{if(e.altKey){state.zoom=Math.max(.72,Math.min(1.35,state.zoom*Math.exp(-e.deltaY*.001)));e.preventDefault();}},{passive:false});window.addEventListener('resize',resize,{passive:true});
+  // Make the page's DOM the crawler's terrain, not just the article's words.
+  canvas.dataset.renderer='canvas3d-fallback';window.__CRAWLER_VISIBLE__=true;window.__CRAWLER_TEN_LEGS__=10;requestAnimationFrame(render);
+}
+
+startCanvasFallback();
+})();
+</script>
+</body>
+</html>

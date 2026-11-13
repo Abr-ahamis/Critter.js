@@ -1,0 +1,244 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Orb Web Construction — Silk Only</title>
+<style>
+  :root { color-scheme: dark; --bg:#080b10; --panel:rgba(13,18,25,.82); --text:#d8e0e8; --muted:#83909e; --silk:rgba(225,238,246,.78); }
+  * { box-sizing:border-box; }
+  html,body { margin:0; width:100%; height:100%; overflow:hidden; background:var(--bg); color:var(--text); font-family:Inter,ui-sans-serif,system-ui,-apple-system,"Segoe UI",sans-serif; }
+  canvas { display:block; width:100vw; height:100vh; }
+  .hud { position:fixed; left:20px; top:18px; z-index:2; max-width:min(390px,calc(100vw - 40px)); padding:14px 16px; border:1px solid rgba(180,205,225,.14); border-radius:13px; background:var(--panel); backdrop-filter:blur(12px); box-shadow:0 10px 36px rgba(0,0,0,.22); pointer-events:none; }
+  .eyebrow { color:#9cb0c2; font:600 10px/1.4 ui-monospace,monospace; letter-spacing:.17em; text-transform:uppercase; }
+  h1 { margin:4px 0 5px; font-size:15px; font-weight:600; letter-spacing:.02em; }
+  #stage { color:#c5d1dd; font:11px/1.5 ui-monospace,monospace; }
+  #detail { margin-top:5px; color:var(--muted); font-size:11px; line-height:1.45; }
+  .actions { position:fixed; right:20px; top:18px; z-index:2; display:flex; gap:8px; }
+  button { border:1px solid rgba(190,215,235,.2); color:#dce6ef; background:rgba(14,20,28,.88); border-radius:9px; padding:9px 12px; font-size:11px; cursor:pointer; backdrop-filter:blur(10px); }
+  button:hover { background:rgba(35,48,62,.95); border-color:rgba(210,230,245,.35); }
+  .legend { position:fixed; right:20px; bottom:18px; z-index:2; display:flex; flex-wrap:wrap; gap:12px; padding:9px 12px; border:1px solid rgba(180,205,225,.12); border-radius:9px; background:rgba(13,18,25,.7); color:#8e9baa; font:10px ui-monospace,monospace; pointer-events:none; }
+  .key { display:inline-block; width:17px; height:2px; vertical-align:middle; margin-right:5px; background:#c9d8e5; }
+  .key.sticky { background:#e4d8b8; box-shadow:0 0 5px rgba(235,218,172,.7); }
+  @media (max-width:600px) { .hud { left:10px; top:10px; } .actions { right:10px; top:auto; bottom:18px; } .legend { left:10px; right:auto; bottom:62px; } }
+</style>
+</head>
+<body>
+<canvas id="web"></canvas>
+<section class="hud" aria-live="polite">
+  <div class="eyebrow">Silk construction study</div>
+  <h1>Orb web — construction sequence</h1>
+  <div id="stage">Stage 1 / 7 · Bridge line</div>
+  <div id="detail">A fine structural thread drifts until it catches an anchor.</div>
+</section>
+<div class="actions"><button id="replay">↻ Rebuild web</button><button id="pause">Ⅱ Pause</button></div>
+<div class="legend"><span><i class="key"></i>Structural silk</span><span><i class="key sticky"></i>Capture spiral / glue droplets</span></div>
+<script>
+(() => {
+  'use strict';
+  const canvas = document.getElementById('web');
+  const ctx = canvas.getContext('2d');
+  const stageLabel = document.getElementById('stage');
+  const detailLabel = document.getElementById('detail');
+  const replayButton = document.getElementById('replay');
+  const pauseButton = document.getElementById('pause');
+
+  const stages = [
+    {name:'Bridge line', detail:'A light structural strand drifts, catches, tightens, and is reinforced.', duration:3000},
+    {name:'Y-shaped foundation', detail:'A drop line and two upper arms establish the central hub.', duration:2200},
+    {name:'Perimeter frame', detail:'The outer polygon is tensioned to distribute load around the web.', duration:3500},
+    {name:'Radial spokes', detail:'Straight structural radii connect the hub to evenly spaced frame anchors.', duration:4200},
+    {name:'Auxiliary spiral', detail:'A temporary non-sticky scaffold winds outward to stabilize the spokes.', duration:4200},
+    {name:'Capture spiral', detail:'Elastic, glue-coated capture silk is laid from the perimeter inward; the scaffold is removed behind it.', duration:7000},
+    {name:'Finished hub', detail:'A reinforced central platform and a small open free-zone complete the web.', duration:1900}
+  ];
+  const TOTAL = stages.reduce((s,x)=>s+x.duration,0);
+  let cssW=0, cssH=0, dpr=1, startTime=0, pausedAt=0, paused=false, finished=false;
+  let geometry;
+
+  const clamp=(v,a=0,b=1)=>Math.max(a,Math.min(b,v));
+  const ease=t=>{t=clamp(t);return t*t*(3-2*t);};
+  const lerp=(a,b,t)=>a+(b-a)*t;
+  const point=(x,y)=>({x,y});
+
+  function resize(){
+    dpr=Math.min(window.devicePixelRatio||1,2);
+    cssW=window.innerWidth; cssH=window.innerHeight;
+    canvas.width=Math.round(cssW*dpr); canvas.height=Math.round(cssH*dpr);
+    ctx.setTransform(dpr,0,0,dpr,0,0);
+    geometry=makeGeometry();
+    render(currentElapsed());
+  }
+  function makeGeometry(){
+    const marginX=Math.min(cssW*.105,125), marginY=Math.min(cssH*.12,105);
+    const cx=cssW*.5, cy=cssH*.51;
+    const rx=Math.max(70,(cssW-2*marginX)*.43), ry=Math.max(90,(cssH-2*marginY)*.43);
+    const hub=point(cx,cy);
+    const anchors=[];
+    const n=24;
+    for(let i=0;i<n;i++){
+      const a=-Math.PI/2 + i*Math.PI*2/n;
+      const wobble=1+0.025*Math.sin(i*2.17)+0.018*Math.cos(i*3.71);
+      anchors.push(point(cx+Math.cos(a)*rx*wobble,cy+Math.sin(a)*ry*wobble));
+    }
+    // The bridge is the top edge; the Y has its hub below the bridge midpoint.
+    const leftTop=anchors[21];
+    const rightTop=anchors[3];
+    const bottom=anchors[12];
+    return {cx,cy,rx,ry,hub,anchors,leftTop,rightTop,bottom};
+  }
+
+  function drawBackground(){
+    ctx.fillStyle='#080b10'; ctx.fillRect(0,0,cssW,cssH);
+    const g=ctx.createRadialGradient(cssW*.5,cssH*.48,Math.min(cssW,cssH)*.04,cssW*.5,cssH*.48,Math.max(cssW,cssH)*.72);
+    g.addColorStop(0,'rgba(23,34,46,.36)'); g.addColorStop(1,'rgba(4,7,11,.08)');
+    ctx.fillStyle=g; ctx.fillRect(0,0,cssW,cssH);
+    ctx.save(); ctx.strokeStyle='rgba(170,195,218,.035)'; ctx.lineWidth=1;
+    const step=48; ctx.beginPath();
+    for(let x=(cssW%step)/2;x<cssW;x+=step){ctx.moveTo(x,0);ctx.lineTo(x,cssH);}
+    for(let y=(cssH%step)/2;y<cssH;y+=step){ctx.moveTo(0,y);ctx.lineTo(cssW,y);}
+    ctx.stroke(); ctx.restore();
+  }
+  function strokePath(points,progress,color,width=0.75,alpha=1,glow=0){
+    if(points.length<2||progress<=0)return;
+    const total=points.length-1, scaled=clamp(progress)*total, whole=Math.floor(scaled), frac=scaled-whole;
+    ctx.save(); ctx.globalAlpha=alpha; ctx.strokeStyle=color; ctx.lineWidth=width; ctx.lineCap='round'; ctx.lineJoin='round';
+    if(glow){ctx.shadowColor=color;ctx.shadowBlur=glow;}
+    ctx.beginPath(); ctx.moveTo(points[0].x,points[0].y);
+    for(let i=1;i<=whole && i<points.length;i++)ctx.lineTo(points[i].x,points[i].y);
+    if(whole<total){const a=points[whole],b=points[whole+1];ctx.lineTo(lerp(a.x,b.x,frac),lerp(a.y,b.y,frac));}
+    ctx.stroke(); ctx.restore();
+  }
+  function linePoints(a,b,steps=36,bend=0){
+    const out=[]; const dx=b.x-a.x,dy=b.y-a.y; const len=Math.hypot(dx,dy)||1; const nx=-dy/len,ny=dx/len;
+    for(let i=0;i<=steps;i++){const t=i/steps; const wave=Math.sin(Math.PI*t)*bend;out.push(point(lerp(a.x,b.x,t)+nx*wave,lerp(a.y,b.y,t)+ny*wave));}
+    return out;
+  }
+  function drawPath(a,b,p,color='rgba(220,235,246,.68)',width=.75,alpha=1){strokePath(linePoints(a,b),p,color,width,alpha);}
+  function perimeterPoints(){return [...geometry.anchors,geometry.anchors[0]];}
+  function spiralPoints(inward=false){
+    const {cx,cy,rx,ry}=geometry; const pts=[]; const turns=6.8; const count=1300;
+    for(let i=0;i<=count;i++){
+      const t=i/count;
+      const r=inward ? 1-t*.92 : .075+t*.925;
+      const angle=-Math.PI/2 + t*turns*Math.PI*2;
+      pts.push(point(cx+Math.cos(angle)*rx*r,cy+Math.sin(angle)*ry*r));
+    }
+    return pts;
+  }
+  function drawBridge(p){
+    const {leftTop,rightTop}=geometry;
+    const a=point(leftTop.x,leftTop.y-2), b=point(rightTop.x,rightTop.y-2);
+    // Soft wind-borne floating thread before it catches the far anchor.
+    const progress=clamp(p);
+    if(progress<.76){
+      const t=progress/.76; const end=point(lerp(a.x,b.x,t),lerp(a.y,b.y,t)+Math.sin(t*5)*10);
+      const pts=linePoints(a,end,80,Math.sin(t*8)*12);
+      strokePath(pts,1,'rgba(224,237,246,.52)',.65,.95,.6);
+      const snag=point(end.x,end.y);ctx.fillStyle='rgba(226,239,248,.65)';ctx.beginPath();ctx.arc(snag.x,snag.y,1.5,0,Math.PI*2);ctx.fill();
+    } else {
+      const q=(progress-.76)/.24;
+      drawPath(a,b,1,'rgba(224,237,246,.72)',.8);
+      drawPath(point(a.x,a.y+2),point(b.x,b.y+2),ease(q),'rgba(224,237,246,.38)',.55);
+      ctx.fillStyle='rgba(235,244,250,.8)';[a,b].forEach(v=>{ctx.beginPath();ctx.arc(v.x,v.y,2,0,Math.PI*2);ctx.fill();});
+    }
+  }
+  function drawY(p){
+    const {hub,leftTop,rightTop,bottom}=geometry;
+    const arms=[[hub,leftTop],[hub,rightTop],[hub,bottom]];
+    arms.forEach((v,i)=>drawPath(v[0],v[1],clamp(p*1.06-i*.035),'rgba(225,238,247,.72)',.85));
+    if(p>.82){const q=(p-.82)/.18;ctx.fillStyle=`rgba(225,238,247,${q*.65})`;ctx.beginPath();ctx.arc(hub.x,hub.y,2.1,0,Math.PI*2);ctx.fill();}
+  }
+  function drawPerimeter(p){
+    const pts=perimeterPoints();
+    strokePath(pts,p,'rgba(220,235,246,.75)',.85,.95,.4);
+    // Light secondary tension line, offset subtly inward.
+    if(p>.8){const q=(p-.8)/.2; const inner=pts.map(v=>point(geometry.cx+(v.x-geometry.cx)*.982,geometry.cy+(v.y-geometry.cy)*.982));strokePath(inner,q,'rgba(210,229,242,.28)',.45,.8);}
+    if(p>0){const n=Math.floor(p*geometry.anchors.length);for(let i=0;i<=n&&i<geometry.anchors.length;i++){const v=geometry.anchors[i];ctx.fillStyle='rgba(225,238,247,.55)';ctx.beginPath();ctx.arc(v.x,v.y,1.2,0,Math.PI*2);ctx.fill();}}
+  }
+  function drawRadii(p){
+    const a=geometry.anchors; const n=p*a.length; const complete=Math.floor(n); const frac=n-complete;
+    for(let i=0;i<complete;i++)drawPath(geometry.hub,a[i],1,'rgba(218,233,244,.66)',.62,.95);
+    if(complete<a.length)drawPath(geometry.hub,a[complete],frac,'rgba(218,233,244,.66)',.62,.95);
+    // A few hub reinforcing spokes are doubled slightly for structural tension.
+    if(p>.94){for(let i=0;i<8;i++){const v=a[i*3];const mid=point(lerp(geometry.hub.x,v.x,.18),lerp(geometry.hub.y,v.y,.18));drawPath(geometry.hub,mid,1,'rgba(236,244,249,.35)',.45);}}
+  }
+  function drawAuxiliary(p,alpha=1){
+    const pts=spiralPoints(false);
+    strokePath(pts,p,'rgba(177,205,225,.48)',.58,alpha,.25);
+  }
+  function drawCapture(p){
+    const pts=spiralPoints(true);
+    strokePath(pts,p,'rgba(226,218,190,.88)',.72,.98,1.8);
+    // Tiny glistening glue droplets, revealed with the advancing capture spiral.
+    const count=Math.floor(clamp(p)*260);
+    ctx.save();
+    for(let i=0;i<count;i++){
+      const idx=Math.min(pts.length-1,Math.floor((i/260)*(pts.length-1)));
+      const v=pts[idx];
+      if(i%3!==0)continue;
+      const r=(i%7===0)?1.15:.68;
+      ctx.fillStyle=(i%5===0)?'rgba(255,246,216,.95)':'rgba(230,223,201,.72)';
+      ctx.shadowColor='rgba(247,230,184,.65)';ctx.shadowBlur=3;
+      ctx.beginPath();ctx.arc(v.x,v.y,r,0,Math.PI*2);ctx.fill();
+    }
+    ctx.restore();
+  }
+  function drawHub(p){
+    const {hub,rx,ry}=geometry;
+    // Open free-zone around a small compact central platform.
+    ctx.save();ctx.strokeStyle='rgba(222,235,244,.78)';ctx.lineWidth=.8;ctx.shadowColor='rgba(207,228,241,.35)';ctx.shadowBlur=4;
+    const r=Math.min(rx,ry)*.064;
+    ctx.beginPath();ctx.arc(hub.x,hub.y,r,0,Math.PI*2);ctx.stroke();
+    for(let i=0;i<8;i++){const a=i*Math.PI/4;const x1=hub.x+Math.cos(a)*r*.65,y1=hub.y+Math.sin(a)*r*.65,x2=hub.x+Math.cos(a)*r*1.35,y2=hub.y+Math.sin(a)*r*1.35;ctx.beginPath();ctx.moveTo(x1,y1);ctx.lineTo(x2,y2);ctx.stroke();}
+    ctx.fillStyle='rgba(235,243,248,.76)';ctx.beginPath();ctx.arc(hub.x,hub.y,1.8,0,Math.PI*2);ctx.fill();ctx.restore();
+    if(p>0){ctx.save();ctx.globalAlpha=.25*p;ctx.strokeStyle='rgba(226,238,246,.7)';ctx.lineWidth=.55;ctx.beginPath();ctx.arc(hub.x,hub.y,r*1.65,0,Math.PI*2);ctx.stroke();ctx.restore();}
+  }
+  function getTimeline(elapsed){
+    let t=Math.max(0,elapsed);let index=0;
+    while(index<stages.length-1 && t>=stages[index].duration){t-=stages[index].duration;index++;}
+    return {index,progress:clamp(t/stages[index].duration),done:elapsed>=TOTAL};
+  }
+  function render(elapsed){
+    if(!geometry)return;
+    drawBackground();
+    const tl=getTimeline(elapsed);
+    // Keep all completed construction stages visible.
+    if(tl.index>=0)drawBridge(tl.index===0?tl.progress:1);
+    if(tl.index>=1)drawY(tl.index===1?tl.progress:1);
+    if(tl.index>=2)drawPerimeter(tl.index===2?tl.progress:1);
+    if(tl.index>=3)drawRadii(tl.index===3?tl.progress:1);
+    if(tl.index>=4)drawAuxiliary(tl.index===4?tl.progress:1, tl.index>=5 ? Math.max(.025,1-(tl.index===5?tl.progress:1)) : .72);
+    if(tl.index>=5)drawCapture(tl.index===5?tl.progress:1);
+    if(tl.index>=6)drawHub(tl.index===6?tl.progress:1);
+    if(tl.done){drawBridge(1);drawY(1);drawPerimeter(1);drawRadii(1);drawAuxiliary(1,.025);drawCapture(1);drawHub(1);}
+    const s=stages[tl.index];
+    stageLabel.textContent=tl.done?'Construction complete · 7 stages':`Stage ${tl.index+1} / 7 · ${s.name}`;
+    detailLabel.textContent=tl.done?'The structural frame, radii, capture spiral, and finished hub are in place.':s.detail;
+  }
+  function currentElapsed(){
+    if(finished)return TOTAL;
+    if(paused)return pausedAt;
+    return Math.max(0,performance.now()-startTime);
+  }
+  function frame(){
+    if(paused || finished)return;
+    const elapsed=currentElapsed();
+    if(elapsed>=TOTAL){finished=true;render(TOTAL);pauseButton.textContent='↻ Replay';return;}
+    render(elapsed);requestAnimationFrame(frame);
+  }
+  function restart(){
+    finished=false;paused=false;pausedAt=0;startTime=performance.now();pauseButton.textContent='Ⅱ Pause';requestAnimationFrame(frame);
+  }
+  replayButton.addEventListener('click',restart);
+  pauseButton.addEventListener('click',()=>{
+    if(finished){restart();return;}
+    if(paused){startTime=performance.now()-pausedAt;paused=false;pauseButton.textContent='Ⅱ Pause';requestAnimationFrame(frame);}
+    else{pausedAt=performance.now()-startTime;paused=true;pauseButton.textContent='▶ Resume';}
+  });
+  window.addEventListener('resize',resize,{passive:true});
+  resize();restart();
+})();
+</script>
+</body>
+</html>

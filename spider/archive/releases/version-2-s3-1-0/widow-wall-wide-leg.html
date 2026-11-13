@@ -1,0 +1,1031 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="theme-color" content="#08090c" />
+  <title>Black Widow — 3D Wall Crawler</title>
+  <style>
+    :root { color-scheme: dark; }
+    * { box-sizing: border-box; }
+    html, body { width:100%; height:100%; margin:0; overflow:hidden; background:#08090c; }
+    body { user-select:none; -webkit-user-select:none; }
+    #view { position:fixed; inset:0; width:100%; height:100%; display:block; outline:none; touch-action:none; }
+    #load-error { position:fixed; inset:0; display:none; place-items:center; padding:24px; color:#d5d7df; background:#08090c; font:14px/1.6 system-ui,sans-serif; text-align:center; }
+    #load-error.visible { display:grid; }
+  </style>
+</head>
+<body>
+  <canvas id="view" aria-label="A small three-dimensional black widow spider walking and climbing a solid wall"></canvas>
+  <div id="load-error">The 3D engine could not be loaded. Check your internet connection and reopen this file in Brave or Chrome.</div>
+
+  <script type="module">
+    import * as THREE from 'https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js';
+
+    // ---------------------------------------------------------------------
+    // Renderer, distant camera, dark floor and the original perspective grid.
+    // ---------------------------------------------------------------------
+    const canvas = document.getElementById('view');
+    let renderer;
+    try {
+      renderer = new THREE.WebGLRenderer({ canvas, antialias:true, alpha:false, powerPreference:'high-performance' });
+    } catch (error) {
+      document.getElementById('load-error').classList.add('visible');
+      throw error;
+    }
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 1.8));
+    renderer.setSize(window.innerWidth, window.innerHeight, false);
+    renderer.shadowMap.enabled = true;
+    renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+    renderer.outputColorSpace = THREE.SRGBColorSpace;
+    renderer.toneMapping = THREE.ACESFilmicToneMapping;
+    renderer.toneMappingExposure = 1.12;
+
+    const scene = new THREE.Scene();
+    scene.background = new THREE.Color(0x08090c);
+    scene.fog = new THREE.Fog(0x08090c, 52, 115);
+
+    const camera = new THREE.PerspectiveCamera(42, window.innerWidth / window.innerHeight, 0.1, 200);
+    const cameraTarget = new THREE.Vector3(0, 3.5, -5.5);
+    let cameraDistance = 48;
+    let cameraAzimuth = 0;
+    let cameraElevation = 0.49;
+    const minCameraDistance = 32;
+    const maxCameraDistance = 86;
+    function updateCamera() {
+      const horizontal = Math.cos(cameraElevation) * cameraDistance;
+      camera.position.set(
+        cameraTarget.x + Math.sin(cameraAzimuth) * horizontal,
+        cameraTarget.y + Math.sin(cameraElevation) * cameraDistance,
+        cameraTarget.z + Math.cos(cameraAzimuth) * horizontal
+      );
+      camera.lookAt(cameraTarget);
+    }
+    updateCamera();
+
+    scene.add(new THREE.HemisphereLight(0xb9c4d8, 0x111116, 1.0));
+    const keyLight = new THREE.DirectionalLight(0xe2e6f2, 2.0);
+    keyLight.position.set(-13, 25, 18);
+    keyLight.castShadow = true;
+    keyLight.shadow.mapSize.set(2048, 2048);
+    keyLight.shadow.camera.left = -32;
+    keyLight.shadow.camera.right = 32;
+    keyLight.shadow.camera.top = 28;
+    keyLight.shadow.camera.bottom = -28;
+    keyLight.shadow.bias = -0.00025;
+    scene.add(keyLight);
+    const rimLight = new THREE.PointLight(0x8d263c, 16, 28, 2);
+    rimLight.position.set(7, 9, 8);
+    scene.add(rimLight);
+
+    const floor = new THREE.Mesh(
+      new THREE.PlaneGeometry(140, 140),
+      new THREE.MeshStandardMaterial({ color:0x090a0e, roughness:0.96, metalness:0.02 })
+    );
+    floor.rotation.x = -Math.PI / 2;
+    floor.position.y = -0.04;
+    floor.receiveShadow = true;
+    scene.add(floor);
+
+    const floorGrid = new THREE.GridHelper(140, 70, 0x343640, 0x22242c);
+    floorGrid.position.y = 0.006;
+    floorGrid.material.transparent = true;
+    floorGrid.material.opacity = 0.28;
+    floorGrid.material.depthWrite = false;
+    scene.add(floorGrid);
+
+    // ---------------------------------------------------------------------
+    // Solid climbable obstacle. Its front, back, sides and top are physical
+    // geometry; ground navigation checks this footprint before every move.
+    // ---------------------------------------------------------------------
+    const wall = new THREE.Group();
+    const wallWidth = 22;
+    const wallHeight = 10;
+    const wallDepth = 0.9;
+    const wallCenterZ = -11.0;
+    const wallFrontZ = wallCenterZ + wallDepth / 2;
+    const wallBackZ = wallCenterZ - wallDepth / 2;
+    const wallBody = new THREE.Mesh(
+      new THREE.BoxGeometry(wallWidth, wallHeight, wallDepth),
+      new THREE.MeshStandardMaterial({ color:0x17191f, roughness:0.92, metalness:0.04 })
+    );
+    wallBody.position.set(0, wallHeight / 2, wallCenterZ);
+    wallBody.castShadow = true;
+    wallBody.receiveShadow = true;
+    wall.add(wallBody);
+
+    const wallEdges = new THREE.LineSegments(
+      new THREE.EdgesGeometry(wallBody.geometry),
+      new THREE.LineBasicMaterial({ color:0x41434b, transparent:true, opacity:0.42 })
+    );
+    wallEdges.position.copy(wallBody.position);
+    wall.add(wallEdges);
+
+    const seamMaterial = new THREE.MeshStandardMaterial({ color:0x0d0f13, roughness:1 });
+    for (let row = 1; row < 5; row++) {
+      const seam = new THREE.Mesh(new THREE.BoxGeometry(wallWidth - 0.12, 0.025, 0.018), seamMaterial);
+      seam.position.set(0, row * 1.95, wallFrontZ + 0.012);
+      wall.add(seam);
+    }
+    for (let col = -4; col <= 4; col++) {
+      const seam = new THREE.Mesh(new THREE.BoxGeometry(0.018, wallHeight - 0.12, 0.018), seamMaterial);
+      seam.position.set(col * 2.35, wallHeight / 2, wallFrontZ + 0.014);
+      wall.add(seam);
+    }
+    const wallCap = new THREE.Mesh(
+      new THREE.BoxGeometry(wallWidth + 0.18, 0.14, wallDepth + 0.2),
+      new THREE.MeshStandardMaterial({ color:0x24262d, roughness:0.86 })
+    );
+    wallCap.position.set(0, wallHeight + 0.02, wallCenterZ);
+    wallCap.castShadow = true;
+    wallCap.receiveShadow = true;
+    wall.add(wallCap);
+    scene.add(wall);
+
+    // Invisible front-face target. The solid wall mesh is also raycast, so a
+    // pointer cannot select floor points hidden behind the obstacle.
+    const wallTargetPlane = new THREE.Mesh(
+      new THREE.PlaneGeometry(wallWidth, wallHeight),
+      new THREE.MeshBasicMaterial({ transparent:true, opacity:0, depthWrite:false, side:THREE.DoubleSide })
+    );
+    wallTargetPlane.position.set(0, wallHeight / 2, wallFrontZ + 0.025);
+    scene.add(wallTargetPlane);
+
+    // ---------------------------------------------------------------------
+    // Small black widow body. Dimensions and markings are taken from the
+    // supplied 2D source drawing (18 px = 0.018 scene units per source unit).
+    // Local +X is the head/front, +Y points away from the climbing surface,
+    // and +Z is the spider's lateral axis.
+    // ---------------------------------------------------------------------
+    const BODY_HEIGHT = 0.56;
+    const PX = 0.018;
+    const spiderRoot = new THREE.Group();
+    scene.add(spiderRoot);
+    const bodyGroup = new THREE.Group();
+    spiderRoot.add(bodyGroup);
+
+    const shellMaterial = new THREE.MeshPhysicalMaterial({
+      color:0x08080b, roughness:0.21, metalness:0.12, clearcoat:1, clearcoatRoughness:0.12
+    });
+    const shellHighlight = new THREE.MeshPhysicalMaterial({
+      color:0x34313b, roughness:0.27, metalness:0.08, clearcoat:0.85
+    });
+    const legMaterial = new THREE.MeshPhysicalMaterial({
+      color:0x101015, roughness:0.27, metalness:0.12, clearcoat:0.82, clearcoatRoughness:0.18
+    });
+    const legHighlightMaterial = new THREE.MeshStandardMaterial({ color:0x38343d, roughness:0.35, metalness:0.12 });
+    const jointMaterial = new THREE.MeshPhysicalMaterial({ color:0x050508, roughness:0.2, metalness:0.16, clearcoat:1 });
+    const redMaterial = new THREE.MeshPhysicalMaterial({
+      color:0xc80e2d, roughness:0.23, metalness:0.04, clearcoat:0.92, clearcoatRoughness:0.15,
+      emissive:0x250007, emissiveIntensity:0.22, side:THREE.DoubleSide
+    });
+
+    // Source abdomen bounds: x=-43.5..-8, z=-16.8..16.8 (scaled by PX).
+    const abdomenCenterX = -25.75 * PX;
+    const abdomenRx = 17.75 * PX;
+    const abdomenRz = 16.8 * PX;
+    const abdomenRy = 16.2 * PX;
+    const abdomen = new THREE.Mesh(new THREE.SphereGeometry(1, 44, 32), shellMaterial);
+    abdomen.scale.set(abdomenRx, abdomenRy, abdomenRz);
+    abdomen.position.set(abdomenCenterX, 0, 0);
+    abdomen.castShadow = true;
+    abdomen.receiveShadow = true;
+    bodyGroup.add(abdomen);
+
+    // Soft chitin highlight on the rounded rear-facing curve.
+    const abdomenSheen = new THREE.Mesh(new THREE.SphereGeometry(1, 28, 18), shellHighlight);
+    abdomenSheen.scale.set(abdomenRx * 0.68, abdomenRy * 0.085, abdomenRz * 0.55);
+    abdomenSheen.position.set(abdomenCenterX + 0.025, abdomenRy * 0.91, -0.018);
+    bodyGroup.add(abdomenSheen);
+
+    // Narrow pedicel connecting the two main body regions.
+    const pedicel = new THREE.Mesh(new THREE.CylinderGeometry(0.034, 0.043, 0.20, 16), shellMaterial);
+    pedicel.rotation.z = Math.PI / 2;
+    pedicel.position.set(-0.105, -0.006, 0);
+    pedicel.castShadow = true;
+    bodyGroup.add(pedicel);
+
+    // Prosoma: source ellipse center (1.5,0), radii (10.2,7.4).
+    const prosoma = new THREE.Mesh(new THREE.SphereGeometry(1, 36, 28), shellMaterial);
+    prosoma.scale.set(10.2 * PX, 7.4 * PX, 7.4 * PX);
+    prosoma.position.set(1.5 * PX, 0.012, 0);
+    prosoma.castShadow = true;
+    prosoma.receiveShadow = true;
+    bodyGroup.add(prosoma);
+
+    const carapaceSheen = new THREE.Mesh(new THREE.SphereGeometry(1, 24, 16), shellHighlight);
+    carapaceSheen.scale.set(6.0 * PX, 0.65 * PX, 3.4 * PX);
+    carapaceSheen.position.set(0.5 * PX, 7.2 * PX, -0.4 * PX);
+    bodyGroup.add(carapaceSheen);
+
+    // A red dorsal marking mapped onto the curved abdomen surface. Its outline
+    // follows the exact bezier silhouette in the supplied 2D body code.
+    function makeDorsalMarkShape() {
+      const s = new THREE.Shape();
+      const k = PX;
+      s.moveTo(-31.5*k, -8.0*k);
+      s.bezierCurveTo(-36.0*k, -8.4*k, -38.2*k, -5.2*k, -35.8*k, -2.8*k);
+      s.lineTo(-28.4*k, -0.9*k);
+      s.lineTo(-25.9*k, -2.1*k);
+      s.lineTo(-27.4*k, 0);
+      s.lineTo(-25.9*k, 2.1*k);
+      s.lineTo(-28.4*k, 0.9*k);
+      s.bezierCurveTo(-36.0*k, 2.8*k, -36.0*k, 8.4*k, -31.5*k, 8.0*k);
+      s.bezierCurveTo(-27.5*k, 7.6*k, -25.0*k, 4.2*k, -23.7*k, 1.7*k);
+      s.bezierCurveTo(-22.4*k, 4.2*k, -19.0*k, 7.3*k, -15.8*k, 6.2*k);
+      s.bezierCurveTo(-12.3*k, 4.9*k, -13.2*k, 1.7*k, -17.0*k, 0);
+      s.bezierCurveTo(-13.2*k, -1.7*k, -12.3*k, -4.9*k, -15.8*k, -6.2*k);
+      s.bezierCurveTo(-19.0*k, -7.3*k, -22.4*k, -4.2*k, -23.7*k, -1.7*k);
+      s.bezierCurveTo(-25.0*k, -4.2*k, -27.5*k, -7.6*k, -31.5*k, -8.0*k);
+      s.closePath();
+      return s;
+    }
+    function makeCurvedAbdomenMark(material, sign = 1) {
+      const geometry = new THREE.ShapeGeometry(makeDorsalMarkShape(), 22);
+      const position = geometry.getAttribute('position');
+      for (let i = 0; i < position.count; i++) {
+        const x = position.getX(i);
+        const z = position.getY(i);
+        const q = ((x - abdomenCenterX) / abdomenRx) ** 2 + (z / abdomenRz) ** 2;
+        const surfaceY = abdomenRy * Math.sqrt(Math.max(0.035, 1 - q));
+        position.setXYZ(i, x, sign * (surfaceY + 0.006), z);
+      }
+      geometry.computeVertexNormals();
+      const mark = new THREE.Mesh(geometry, material);
+      mark.material = material;
+      mark.castShadow = false;
+      mark.receiveShadow = false;
+      return mark;
+    }
+    bodyGroup.add(makeCurvedAbdomenMark(redMaterial, 1));
+    bodyGroup.add(makeCurvedAbdomenMark(redMaterial, -1));
+
+    // Small lateral red flecks from the source, placed on each side of the abdomen.
+    const flecks = [
+      [-36.0, -5.0, 1.05, 1.65, -0.35], [-37.0, 4.3, 0.85, 1.35, 0.25],
+      [-13.8, -4.1, 0.75, 1.2, -0.3], [-13.7, 4.0, 0.75, 1.2, 0.3]
+    ];
+    for (const [x,y,rx,rz] of flecks) {
+      for (const sign of [-1,1]) {
+        const fleck = new THREE.Mesh(new THREE.SphereGeometry(1, 14, 10), redMaterial);
+        fleck.scale.set(rx*PX, 0.018, rz*PX);
+        fleck.position.set(x*PX, sign * 0.075, y*PX);
+        bodyGroup.add(fleck);
+      }
+    }
+
+    // Rear spinnerets, eight small glossy eyes, pedipalps and chelicerae.
+    for (const z of [-0.035, 0, 0.035]) {
+      const spinneret = new THREE.Mesh(new THREE.ConeGeometry(0.018, 0.085, 8), jointMaterial);
+      spinneret.rotation.z = -Math.PI / 2;
+      spinneret.position.set(-0.79, -0.01, z);
+      bodyGroup.add(spinneret);
+    }
+
+    const eyePositions = [
+      [7.1,-3.25,0.82],[8.3,-2.35,0.78],[8.8,-1.0,0.72],[8.8,1.0,0.72],
+      [8.3,2.35,0.78],[7.1,3.25,0.82],[6.3,-1.85,0.68],[6.3,1.85,0.68]
+    ];
+    for (const [x,z,r] of eyePositions) {
+      const eye = new THREE.Mesh(new THREE.SphereGeometry(r*PX, 12, 10), jointMaterial);
+      eye.position.set(x*PX, 0.11, z*PX);
+      bodyGroup.add(eye);
+    }
+    for (const side of [-1,1]) {
+      const palp = new THREE.Mesh(new THREE.CylinderGeometry(0.012,0.018,0.13,8), legMaterial);
+      palp.position.set(0.22, -0.045, side*0.105);
+      palp.rotation.z = -0.52;
+      palp.rotation.x = side*0.42;
+      bodyGroup.add(palp);
+      const fang = new THREE.Mesh(new THREE.ConeGeometry(0.012,0.075,8), jointMaterial);
+      fang.position.set(0.27,-0.105,side*0.045);
+      fang.rotation.z = -0.42;
+      bodyGroup.add(fang);
+    }
+
+    // ---------------------------------------------------------------------
+    // Exact seven-part source leg proportions, converted from source pixels.
+    // Each leg has separate bones, joints, planted-foot anchors and swing state.
+    // ---------------------------------------------------------------------
+    const segmentLengths = {
+      coxa:9*PX, trochanter:6*PX, femur:32*PX, patella:14*PX,
+      tibia:28*PX, metatarsus:24*PX, tarsus:14*PX
+    };
+    const segmentRadii = [1.75*PX, 1.45*PX, 1.95*PX, 1.70*PX, 1.70*PX, 1.35*PX, 1.15*PX];
+    const yAxis = new THREE.Vector3(0,1,0);
+    function makeBone(radius, material) {
+      const mesh = new THREE.Mesh(new THREE.CylinderGeometry(radius*0.78, radius, 1, 9, 1, false), material);
+      mesh.castShadow = true;
+      mesh.receiveShadow = true;
+      spiderRoot.add(mesh);
+      return mesh;
+    }
+    function placeBone(mesh, a, b) {
+      const direction = new THREE.Vector3().subVectors(b,a);
+      const length = Math.max(0.0001,direction.length());
+      mesh.position.copy(a).add(b).multiplyScalar(0.5);
+      mesh.quaternion.setFromUnitVectors(yAxis,direction.normalize());
+      mesh.scale.set(1,length,1);
+    }
+    function makeJoint(radius) {
+      const mesh = new THREE.Mesh(new THREE.SphereGeometry(radius,12,10),jointMaterial);
+      mesh.castShadow = true;
+      spiderRoot.add(mesh);
+      return mesh;
+    }
+
+    const legConfigs = [
+      { id:'L1', side:-1, pair:0, attachX:12, attachZ:-6, baseAngle:-0.75, group:'A', phaseOffset:0.000, front:true },
+      { id:'R1', side: 1, pair:0, attachX:12, attachZ: 6, baseAngle: 0.75, group:'B', phaseOffset:0.018, front:true },
+      { id:'L2', side:-1, pair:1, attachX: 4, attachZ:-8, baseAngle:-1.30, group:'B', phaseOffset:0.010, front:false },
+      { id:'R2', side: 1, pair:1, attachX: 4, attachZ: 8, baseAngle: 1.30, group:'A', phaseOffset:0.026, front:false },
+      { id:'L3', side:-1, pair:2, attachX:-4, attachZ:-8, baseAngle:-1.85, group:'A', phaseOffset:0.016, front:false },
+      { id:'R3', side: 1, pair:2, attachX:-4, attachZ: 8, baseAngle: 1.85, group:'B', phaseOffset:0.030, front:false },
+      { id:'L4', side:-1, pair:3, attachX:-12, attachZ:-6, baseAngle:-2.40, group:'B', phaseOffset:0.006, front:false },
+      { id:'R4', side: 1, pair:3, attachX:-12, attachZ: 6, baseAngle: 2.40, group:'A', phaseOffset:0.022, front:false }
+    ];
+
+    const legs = legConfigs.map(cfg => {
+      const bones = segmentRadii.map((r,i) => makeBone(r, (i===2 || i===4) ? legHighlightMaterial : legMaterial));
+      const joints = Array.from({length:6},(_,i)=>makeJoint(i<2 ? 0.026 : 0.022));
+      const foot = makeJoint(0.017);
+      return {
+        ...cfg,
+        attachX:cfg.attachX*PX,
+        attachZ:cfg.attachZ*PX,
+        baseAngle:cfg.baseAngle,
+        phaseOffset:cfg.phaseOffset,
+        bones,joints,foot,
+        plantedFoot:new THREE.Vector3(),
+        currentFoot:new THREE.Vector3(),
+        swingStartFoot:new THREE.Vector3(),
+        targetFoot:new THREE.Vector3(),
+        phaseState:'SUPPORT', isStance:true, swingProgress:0,
+        hydraulicExtension:1, flexionAngle:0.2, liftHeight:0
+      };
+    });
+
+    // Root starts on the broad foreground floor. It stays small in the wide view.
+    spiderRoot.position.set(0,BODY_HEIGHT,7.0);
+
+    // ---------------------------------------------------------------------
+    // Pointer-to-world targeting and camera orbit/zoom.
+    // ---------------------------------------------------------------------
+    const raycaster = new THREE.Raycaster();
+    const pointerNdc = new THREE.Vector2();
+    const floorPlane = new THREE.Plane(new THREE.Vector3(0,1,0),0);
+    const planeHit = new THREE.Vector3();
+    let mouseInside = false;
+    let orbiting = false;
+    let lastPointerX = 0;
+    let lastPointerY = 0;
+    let idleClock = 0;
+    let target = {type:'ground',x:4,z:1,y:0,side:1};
+    let targetValid = true;
+    let wanderTimer = 2.2;
+    let wanderCount = 0;
+    let pushingTarget = false;
+    let investigationCycle = 0;
+    let lastProbeBeat = -1;
+    let speed = 0;
+    let gaitPhase = 0;
+    let motionClock = 0;
+    let isRunning = false;
+    let surfaceMode = 'ground';
+    let wallSide = 1;
+    let transition = null;
+    let obstacleRoute = null;
+    let surfaceNormal = new THREE.Vector3(0,1,0);
+    const heading = new THREE.Vector3(1,0,0);
+    const basisMatrix = new THREE.Matrix4();
+    const localSide = new THREE.Vector3();
+    const ripplePool = [];
+    const worldShift = {x:0,z:0};
+
+    const mod = (v,n)=>((v%n)+n)%n;
+    const smoothStep = t=>t*t*(3-2*t);
+    const smootherStep = t=>t*t*t*(t*(t*6-15)+10);
+    const clamp = (v,a,b)=>Math.max(a,Math.min(b,v));
+
+    function applySpiderOrientation() {
+      const fwd = heading.clone().addScaledVector(surfaceNormal,-heading.dot(surfaceNormal)).normalize();
+      if (fwd.lengthSq()<0.0001) fwd.set(1,0,0);
+      localSide.crossVectors(fwd,surfaceNormal).normalize();
+      basisMatrix.makeBasis(fwd,surfaceNormal,localSide);
+      spiderRoot.quaternion.setFromRotationMatrix(basisMatrix);
+    }
+
+    function updateCameraTargetMapping() {
+      raycaster.setFromCamera(pointerNdc,camera);
+      const planeHits = raycaster.intersectObject(wallTargetPlane,false);
+      const wallHits = raycaster.intersectObject(wallBody,false);
+      const frontPlaneIsVisible = planeHits.length && (!wallHits.length || planeHits[0].distance <= wallHits[0].distance + 0.002);
+      if (frontPlaneIsVisible) {
+        const p = planeHits[0].point;
+        target = {type:'wall',x:clamp(p.x,-wallWidth/2+1.0,wallWidth/2-1.0),y:clamp(p.y,0.65,wallHeight-0.68),z:wallFrontZ+BODY_HEIGHT,side:1};
+        targetValid = true;
+        return;
+      }
+      if (wallHits.length) {
+        const p = wallHits[0].point;
+        const side = p.z >= wallCenterZ ? 1 : -1;
+        target = {type:'wall',x:clamp(p.x,-wallWidth/2+1.0,wallWidth/2-1.0),y:clamp(p.y,0.65,wallHeight-0.68),z:side>0?wallFrontZ+BODY_HEIGHT:wallBackZ-BODY_HEIGHT,side};
+        targetValid = true;
+        return;
+      }
+      if (raycaster.ray.intersectPlane(floorPlane,planeHit)) {
+        target = {type:'ground',x:clamp(planeHit.x,-34,34),z:clamp(planeHit.z,-38,35),y:0,side:1};
+        targetValid = true;
+      } else targetValid = false;
+    }
+
+    function setPointerFromEvent(event) {
+      pointerNdc.x = (event.clientX/window.innerWidth)*2-1;
+      pointerNdc.y = -(event.clientY/window.innerHeight)*2+1;
+      mouseInside = true;
+      idleClock = 0;
+      updateCameraTargetMapping();
+    }
+    canvas.addEventListener('pointerenter',event=>{
+      if (event.pointerType==='mouse' && !orbiting) setPointerFromEvent(event);
+    });
+    canvas.addEventListener('pointermove',event=>{
+      if (orbiting) {
+        const dx=event.clientX-lastPointerX;
+        const dy=event.clientY-lastPointerY;
+        cameraAzimuth-=dx*0.006;
+        cameraElevation=clamp(cameraElevation+dy*0.0045,0.12,1.18);
+        updateCamera();
+      } else setPointerFromEvent(event);
+      lastPointerX=event.clientX;
+      lastPointerY=event.clientY;
+    });
+    canvas.addEventListener('pointerleave',()=>{if(!orbiting)mouseInside=false;});
+    canvas.addEventListener('pointerdown',event=>{
+      lastPointerX=event.clientX;
+      lastPointerY=event.clientY;
+      if (event.button===2 || event.shiftKey) {
+        orbiting=true;
+        canvas.setPointerCapture?.(event.pointerId);
+      } else {
+        setPointerFromEvent(event);
+        addRipple(new THREE.Vector3(spiderRoot.position.x,0.02,spiderRoot.position.z),new THREE.Vector3(0,1,0),0.65);
+      }
+    });
+    window.addEventListener('pointerup',()=>{orbiting=false;});
+    canvas.addEventListener('contextmenu',event=>event.preventDefault());
+    canvas.addEventListener('wheel',event=>{
+      event.preventDefault();
+      cameraDistance=clamp(cameraDistance+event.deltaY*0.026,minCameraDistance,maxCameraDistance);
+      updateCamera();
+    },{passive:false});
+    window.addEventListener('blur',()=>{mouseInside=false;orbiting=false;});
+
+    // ---------------------------------------------------------------------
+    // Reactive contact ripples retained from the original crawler scene.
+    // ---------------------------------------------------------------------
+    function addRipple(position,normal=new THREE.Vector3(0,1,0),force=1) {
+      const ring=new THREE.Mesh(
+        new THREE.RingGeometry(0.88,1,36),
+        new THREE.MeshBasicMaterial({color:0xb5a4b4,transparent:true,opacity:0.40*force,side:THREE.DoubleSide,depthWrite:false})
+      );
+      ring.position.copy(position);
+      ring.quaternion.setFromUnitVectors(new THREE.Vector3(0,0,1),normal.clone().normalize());
+      ring.scale.setScalar(0.08);
+      scene.add(ring);
+      ripplePool.push({mesh:ring,age:0,life:0.82+force*0.2,force});
+      if(ripplePool.length>28){
+        const old=ripplePool.shift();scene.remove(old.mesh);old.mesh.geometry.dispose();old.mesh.material.dispose();
+      }
+    }
+    function updateRipples(dt) {
+      for(let i=ripplePool.length-1;i>=0;i--){
+        const r=ripplePool[i];r.age+=dt;
+        const t=Math.min(1,r.age/r.life);
+        r.mesh.scale.setScalar(0.08+t*(0.65+r.force*0.18));
+        r.mesh.material.opacity=(1-t)*0.36*r.force;
+        if(t>=1){scene.remove(r.mesh);r.mesh.geometry.dispose();r.mesh.material.dispose();ripplePool.splice(i,1);}
+      }
+    }
+
+    // ---------------------------------------------------------------------
+    // Surface transitions. The same local leg rig is reoriented to the floor,
+    // front/back wall face, or top cap. Legs are reseated after each transition.
+    // ---------------------------------------------------------------------
+    function getWallFace(side) { return side>0 ? wallFrontZ : wallBackZ; }
+    function getWallRootZ(side) { return getWallFace(side)+side*BODY_HEIGHT; }
+    function getGroundRootZ(side) { return getWallFace(side)+side*(BODY_HEIGHT+0.09); }
+
+    function localIdealFoot(leg,reach,lead=0) {
+      const hipX=leg.attachX, hipZ=leg.attachZ;
+      return new THREE.Vector3(
+        hipX+Math.cos(leg.baseAngle)*reach+lead,
+        -BODY_HEIGHT,
+        hipZ+Math.sin(leg.baseAngle)*reach
+      );
+    }
+    function reseatLegs() {
+      spiderRoot.updateMatrixWorld(true);
+      for(const leg of legs){
+        const reach=(leg.front?120:100)*PX;
+        const world=spiderRoot.localToWorld(localIdealFoot(leg,reach,0));
+        leg.plantedFoot.copy(world);
+        leg.currentFoot.copy(world);
+        leg.swingStartFoot.copy(world);
+        leg.targetFoot.copy(world);
+        leg.isStance=true;
+        leg.phaseState='SUPPORT';
+        leg.swingProgress=0;
+        leg.liftHeight=0;
+        leg.hydraulicExtension=1;
+      }
+    }
+
+    function beginSurfaceTransition(toMode,toPosition,toNormal,after=null) {
+      if(transition)return;
+      transition={
+        fromPosition:spiderRoot.position.clone(),toPosition:toPosition.clone(),
+        fromNormal:surfaceNormal.clone(),toNormal:toNormal.clone().normalize(),
+        elapsed:0,duration:0.78,mode:toMode,after
+      };
+      surfaceMode='transition';
+      speed=0;
+    }
+    function updateTransition(dt) {
+      if(!transition)return false;
+      transition.elapsed+=dt;
+      const raw=Math.min(1,transition.elapsed/transition.duration);
+      const t=smoothStep(raw);
+      spiderRoot.position.lerpVectors(transition.fromPosition,transition.toPosition,t);
+      surfaceNormal.lerpVectors(transition.fromNormal,transition.toNormal,t).normalize();
+      applySpiderOrientation();
+      if(raw>=1){
+        const finished=transition;
+        transition=null;
+        surfaceMode=finished.mode;
+        surfaceNormal.copy(finished.toNormal);
+        applySpiderOrientation();
+        if(finished.after)finished.after();
+        reseatLegs();
+      }
+      return true;
+    }
+
+    // ---------------------------------------------------------------------
+    // Collision detection: sweep the spider's ground path against the solid
+    // wall footprint. If blocked, route it up, over, and down the wall rather
+    // than allowing its root or legs to pass through the obstacle.
+    // ---------------------------------------------------------------------
+    function segmentHitsWall(sx,sz,ex,ez) {
+      const margin=0.42;
+      const minX=-wallWidth/2-margin,maxX=wallWidth/2+margin;
+      const minZ=wallBackZ-margin,maxZ=wallFrontZ+margin;
+      let tMin=0,tMax=1;
+      const dx=ex-sx,dz=ez-sz;
+      const slabs=[
+        {p:sx,d:dx,min:minX,max:maxX},
+        {p:sz,d:dz,min:minZ,max:maxZ}
+      ];
+      for(const s of slabs){
+        if(Math.abs(s.d)<1e-8){if(s.p<s.min||s.p>s.max)return null;continue;}
+        let t1=(s.min-s.p)/s.d,t2=(s.max-s.p)/s.d;
+        if(t1>t2){const tmp=t1;t1=t2;t2=tmp;}
+        tMin=Math.max(tMin,t1);tMax=Math.min(tMax,t2);
+        if(tMin>tMax)return null;
+      }
+      return tMin>=0&&tMin<=1?tMin:null;
+    }
+
+    function detectObstacleOnGroundPath() {
+      if(surfaceMode!=='ground'||target.type!=='ground'||obstacleRoute)return false;
+      const sx=spiderRoot.position.x,sz=spiderRoot.position.z;
+      const ex=target.x,ez=target.z;
+      const side=sz>=wallCenterZ?1:-1;
+      // Only initiate an over-wall route when the requested destination is on
+      // the opposite side; approaching/standing beside the wall remains free.
+      if(side*(ez-wallCenterZ)>=-0.18)return false;
+      const hitT=segmentHitsWall(sx,sz,ex,ez);
+      if(hitT===null)return false;
+      let crossT;
+      if(Math.abs(ez-sz)>1e-7)crossT=clamp((wallCenterZ-sz)/(ez-sz),0,1);
+      else crossT=hitT;
+      const crossX=clamp(sx+(ex-sx)*crossT,-wallWidth/2+1.25,wallWidth/2-1.25);
+      obstacleRoute={side,crossX,destX:ex,destZ:ez,phase:'approach'};
+      return true;
+    }
+
+    function startAutoRouteFromCurrentWall() {
+      if(obstacleRoute||surfaceMode!=='wall')return;
+      const side=wallSide;
+      obstacleRoute={side,crossX:clamp(spiderRoot.position.x,-wallWidth/2+1.25,wallWidth/2-1.25),destX:target.x,destZ:target.z,phase:'climb'};
+    }
+
+    function beginWallEntry(side,x) {
+      const p=new THREE.Vector3(
+        clamp(x,-wallWidth/2+1.2,wallWidth/2-1.2),
+        BODY_HEIGHT,
+        getWallRootZ(side)
+      );
+      beginSurfaceTransition('wall',p,new THREE.Vector3(0,0,side),()=>{wallSide=side;});
+    }
+
+    function updateObstacleRoute(dt) {
+      if(!obstacleRoute)return false;
+      const r=obstacleRoute;
+      if(r.phase==='approach'){
+        const z=getGroundRootZ(r.side);
+        const dx=r.crossX-spiderRoot.position.x,dz=z-spiderRoot.position.z;
+        const d=Math.hypot(dx,dz);
+        if(d<0.20){
+          spiderRoot.position.x=r.crossX;
+          spiderRoot.position.z=z;
+          speed=0;
+          r.phase='climb';
+          beginWallEntry(r.side,r.crossX);
+        }else moveOnGround(dx,dz,d,dt,false);
+        return true;
+      }
+      if(r.phase==='climb'){
+        const topY=wallHeight-BODY_HEIGHT-0.08;
+        const dx=r.crossX-spiderRoot.position.x,dy=topY-spiderRoot.position.y;
+        const d=Math.hypot(dx,dy);
+        if(d<0.22){
+          speed=0;
+          const startTopZ= getWallFace(r.side)-r.side*0.12;
+          const p=new THREE.Vector3(r.crossX,wallHeight+0.09+BODY_HEIGHT,startTopZ);
+          beginSurfaceTransition('top',p,new THREE.Vector3(0,1,0),()=>{r.phase='crossTop';});
+        }else moveOnWall(dx,dy,d,dt,false);
+        return true;
+      }
+      if(r.phase==='crossTop'){
+        const endTopZ=(r.side>0?wallBackZ+0.12:wallFrontZ-0.12);
+        const dx=r.crossX-spiderRoot.position.x,dz=endTopZ-spiderRoot.position.z;
+        const d=Math.hypot(dx,dz);
+        if(d<0.16){
+          speed=0;
+          const otherSide=-r.side;
+          const p=new THREE.Vector3(r.crossX,wallHeight-BODY_HEIGHT-0.08,getWallRootZ(otherSide));
+          beginSurfaceTransition('wall',p,new THREE.Vector3(0,0,otherSide),()=>{wallSide=otherSide;r.phase='descend';});
+        }else moveOnTop(dx,dz,d,dt,false);
+        return true;
+      }
+      if(r.phase==='descend'){
+        const dy=BODY_HEIGHT-spiderRoot.position.y;
+        const d=Math.abs(dy);
+        if(d<0.20){
+          speed=0;
+          const p=new THREE.Vector3(r.crossX,BODY_HEIGHT,getGroundRootZ(wallSide));
+          beginSurfaceTransition('ground',p,new THREE.Vector3(0,1,0),()=>{
+            const destX=r.destX,destZ=r.destZ;
+            const destinationType=r.destinationType||'ground';
+            obstacleRoute=null;
+            if(destinationType==='wall'&&r.wallTarget){target={...r.wallTarget};}
+            else target={type:'ground',x:destX,z:destZ,y:0,side:1};
+            targetValid=true;
+          });
+        }else moveOnWall(0,dy,d,dt,false);
+        return true;
+      }
+      return true;
+    }
+
+    // ---------------------------------------------------------------------
+    // Original crawler movement, translated to the 3D support surfaces:
+    // pointer pursuit, autonomous waypoints, smooth easing, turning, idle push,
+    // and the original seven-segment leg phase mechanics.
+    // ---------------------------------------------------------------------
+    function chooseWanderTarget() {
+      wanderCount++;
+      if(wanderCount%4===0){
+        target={type:'wall',x:THREE.MathUtils.randFloat(-8.5,8.5),y:THREE.MathUtils.randFloat(2.5,8.2),z:wallFrontZ+BODY_HEIGHT,side:1};
+      }else{
+        target={type:'ground',x:THREE.MathUtils.randFloat(-25,25),z:THREE.MathUtils.randFloat(-27,25),y:0,side:1};
+      }
+      targetValid=true;
+      wanderTimer=THREE.MathUtils.randFloat(3.0,5.2);
+    }
+
+    function updateSpeed(distance,dt,stationary) {
+      isRunning=mouseInside&&distance>7.5;
+      const desired=stationary?0:Math.min(isRunning?4.0:2.35,distance*0.92);
+      const ease=1-Math.pow(1-0.12,dt*60);
+      speed+=(desired-speed)*ease;
+      if(speed<0.012)speed=0;
+      return isRunning;
+    }
+
+    function updateHeading(dx,secondAxis,mode,dt) {
+      const desired=mode==='wall'
+        ?new THREE.Vector3(dx,secondAxis,0)
+        :new THREE.Vector3(dx,0,secondAxis);
+      if(desired.lengthSq()<0.00001)return;
+      desired.normalize();
+      const ease=1-Math.exp(-5.8*dt);
+      heading.lerp(desired,ease).normalize();
+      heading.addScaledVector(surfaceNormal,-heading.dot(surfaceNormal)).normalize();
+      if(heading.lengthSq()<0.001)heading.set(1,0,0);
+      applySpiderOrientation();
+    }
+
+    function updatePushing(stationary,dt,position,normal) {
+      pushingTarget=stationary&&speed<0.08;
+      if(pushingTarget){
+        investigationCycle+=dt*0.62;
+        const beat=Math.floor(investigationCycle*2);
+        if(beat>lastProbeBeat){lastProbeBeat=beat;addRipple(position,normal,0.75);}
+        if(surfaceMode==='ground'){
+          const pushWave=0.55+0.45*Math.sin(investigationCycle*Math.PI*2);
+          const pushScroll=0.27*pushWave*dt;
+          worldShift.x-=heading.x*pushScroll;
+          worldShift.z-=heading.z*pushScroll;
+        }
+      }else{
+        investigationCycle=Math.max(0,investigationCycle-dt*0.8);
+        if(investigationCycle<=0.001)lastProbeBeat=-1;
+      }
+    }
+
+    function moveOnGround(dx,dz,distance,dt,stationary) {
+      updateSpeed(distance,dt,stationary);
+      updateHeading(dx,dz,'ground',dt);
+      if(speed>0){const step=Math.min(distance,speed*dt);spiderRoot.position.x+=(dx/distance)*step;spiderRoot.position.z+=(dz/distance)*step;}
+      spiderRoot.position.y=BODY_HEIGHT;
+      updatePushing(stationary,dt,new THREE.Vector3(spiderRoot.position.x,0.02,spiderRoot.position.z),new THREE.Vector3(0,1,0));
+    }
+
+    function moveOnWall(dx,dy,distance,dt,stationary) {
+      updateSpeed(distance,dt,stationary);
+      updateHeading(dx,dy,'wall',dt);
+      if(speed>0){const step=Math.min(distance,speed*dt);spiderRoot.position.x+=(dx/distance)*step;spiderRoot.position.y+=(dy/distance)*step;}
+      spiderRoot.position.x=clamp(spiderRoot.position.x,-wallWidth/2+1.0,wallWidth/2-1.0);
+      spiderRoot.position.y=clamp(spiderRoot.position.y,BODY_HEIGHT,wallHeight-BODY_HEIGHT);
+      spiderRoot.position.z=getWallRootZ(wallSide);
+      updatePushing(stationary,dt,new THREE.Vector3(spiderRoot.position.x,spiderRoot.position.y,getWallFace(wallSide)),new THREE.Vector3(0,0,wallSide));
+    }
+
+    function moveOnTop(dx,dz,distance,dt,stationary) {
+      updateSpeed(distance,dt,stationary);
+      updateHeading(dx,dz,'ground',dt);
+      if(speed>0){const step=Math.min(distance,speed*dt);spiderRoot.position.x+=(dx/distance)*step;spiderRoot.position.z+=(dz/distance)*step;}
+      spiderRoot.position.y=wallHeight+0.09+BODY_HEIGHT;
+      spiderRoot.position.x=clamp(spiderRoot.position.x,-wallWidth/2+1.0,wallWidth/2-1.0);
+      updatePushing(stationary,dt,new THREE.Vector3(spiderRoot.position.x,wallHeight,spiderRoot.position.z),new THREE.Vector3(0,1,0));
+    }
+
+    function updateManualWallEntry(dt) {
+      const side=target.side||1;
+      const currentSide=spiderRoot.position.z>=wallCenterZ?1:-1;
+      if(currentSide!==side){
+        obstacleRoute={
+          side:currentSide,
+          crossX:clamp(target.x,-wallWidth/2+1.25,wallWidth/2-1.25),
+          destX:target.x,
+          destZ:getGroundRootZ(side),
+          destinationType:'wall',
+          wallTarget:{...target},
+          phase:'approach'
+        };
+        updateObstacleRoute(dt);
+        return;
+      }
+      const baseZ=getGroundRootZ(side);
+      const dx=target.x-spiderRoot.position.x,dz=baseZ-spiderRoot.position.z;
+      const d=Math.hypot(dx,dz);
+      if(d<0.20){speed=0;beginWallEntry(side,target.x);}
+      else moveOnGround(dx,dz,d,dt,false);
+    }
+
+    function updateMovement(dt) {
+      motionClock+=dt;
+      if(mouseInside&&!obstacleRoute){updateCameraTargetMapping();}
+      else if(!mouseInside&&!obstacleRoute){
+        wanderTimer-=dt;
+        if(wanderTimer<=0)chooseWanderTarget();
+      }
+      if(!targetValid&&!obstacleRoute){
+        target={type:surfaceMode==='wall'?'wall':'ground',x:spiderRoot.position.x+(surfaceMode==='wall'?0:2),y:surfaceMode==='wall'?BODY_HEIGHT:0,z:spiderRoot.position.z+1,side:wallSide};
+        targetValid=true;
+      }
+
+      if(obstacleRoute){updateObstacleRoute(dt);return;}
+
+      if(surfaceMode==='ground'&&target.type==='ground'){
+        if(detectObstacleOnGroundPath()){updateObstacleRoute(dt);return;}
+        const dx=target.x-spiderRoot.position.x,dz=target.z-spiderRoot.position.z;
+        const d=Math.hypot(dx,dz);
+        const stationary=mouseInside&&d<1.25&&idleClock>=1.8;
+        if(d<0.24){speed*=Math.pow(0.80,dt*60);if(speed<0.01)speed=0;updatePushing(stationary,dt,new THREE.Vector3(spiderRoot.position.x,0.02,spiderRoot.position.z),new THREE.Vector3(0,1,0));}
+        else moveOnGround(dx,dz,d,dt,stationary);
+        return;
+      }
+
+      if(surfaceMode==='ground'&&target.type==='wall'){
+        updateManualWallEntry(dt);
+        return;
+      }
+
+      if(surfaceMode==='wall'&&target.type==='wall'){
+        if((target.side||wallSide)!==wallSide){
+          // To reach the opposite face, climb to the cap and cross the top.
+          obstacleRoute={side:wallSide,crossX:clamp(target.x,-wallWidth/2+1.2,wallWidth/2-1.2),destX:target.x,destZ:getGroundRootZ(-wallSide),destinationType:'wall',wallTarget:{...target},phase:'climb'};
+          updateObstacleRoute(dt);return;
+        }
+        const desiredY=clamp(target.y+BODY_HEIGHT,BODY_HEIGHT,wallHeight-BODY_HEIGHT);
+        const dx=target.x-spiderRoot.position.x,dy=desiredY-spiderRoot.position.y;
+        const d=Math.hypot(dx,dy);
+        const stationary=mouseInside&&d<1.25&&idleClock>=1.8;
+        if(d<0.24){speed*=Math.pow(0.80,dt*60);if(speed<0.01)speed=0;updatePushing(stationary,dt,new THREE.Vector3(spiderRoot.position.x,spiderRoot.position.y,getWallFace(wallSide)),new THREE.Vector3(0,0,wallSide));}
+        else moveOnWall(dx,dy,d,dt,stationary);
+        return;
+      }
+
+      if(surfaceMode==='wall'&&target.type==='ground'){
+        if(wallSide*(target.z-wallCenterZ)<-0.18){startAutoRouteFromCurrentWall();updateObstacleRoute(dt);return;}
+        const dy=BODY_HEIGHT-spiderRoot.position.y;
+        const d=Math.abs(dy);
+        if(d<0.20){
+          speed=0;
+          const p=new THREE.Vector3(spiderRoot.position.x,BODY_HEIGHT,getGroundRootZ(wallSide));
+          beginSurfaceTransition('ground',p,new THREE.Vector3(0,1,0));
+        }else moveOnWall(0,dy,d,dt,false);
+        return;
+      }
+
+      if(surfaceMode==='top'){
+        const dx=target.x-spiderRoot.position.x;
+        const dz=(target.type==='ground'?target.z:target.z)-spiderRoot.position.z;
+        const d=Math.hypot(dx,dz);
+        if(target.type==='ground'&&wallSide*(target.z-wallCenterZ)<0){
+          const other=-wallSide;
+          const endZ=other>0?wallFrontZ-0.12:wallBackZ+0.12;
+          const tz=endZ-spiderRoot.position.z,td=Math.abs(tz);
+          if(td<0.16){const p=new THREE.Vector3(spiderRoot.position.x,wallHeight-BODY_HEIGHT,getWallRootZ(other));beginSurfaceTransition('wall',p,new THREE.Vector3(0,0,other),()=>{wallSide=other;});}
+          else moveOnTop(0,tz,td,dt,false);
+        }else{
+          const stationary=mouseInside&&d<1.25&&idleClock>=1.8;
+          if(d>0.24)moveOnTop(dx,dz,d,dt,stationary);
+        }
+      }
+    }
+
+    // ---------------------------------------------------------------------
+    // Seven-segment inverse-kinematic leg drawing. The stance/swing split,
+    // tripod phase offsets, smootherstep swing, lift arc and elastic extension
+    // reproduce the supplied original crawler's gait in 3D.
+    // ---------------------------------------------------------------------
+    function updateLegs(dt) {
+      spiderRoot.updateMatrixWorld(true);
+      if(transition){
+        // During a surface corner transition, keep all feet attached to the
+        // changing support surface instead of leaving them embedded in the wall.
+        for(const leg of legs){
+          const local=localIdealFoot(leg,(leg.front?120:100)*PX,0);
+          const world=spiderRoot.localToWorld(local);
+          leg.plantedFoot.copy(world);leg.currentFoot.copy(world);leg.swingStartFoot.copy(world);leg.targetFoot.copy(world);
+          leg.isStance=true;leg.hydraulicExtension=1;leg.liftHeight=0;
+        }
+      }else{
+        const anySwing=legs.some(leg=>!leg.isStance);
+        if(speed>0.05||anySwing||pushingTarget){
+          const gaitStep=isRunning?0.038:0.024;
+          const phaseRate=speed>0.05?(gaitStep+speed*0.005):(pushingTarget?0.020:0.012);
+          gaitPhase=mod(gaitPhase+phaseRate*dt*60,1);
+        }
+        bodyGroup.position.y=Math.sin(motionClock*5.2)*(speed>0.1?0.010:0.0035);
+
+        for(const leg of legs){
+          const hipX=leg.attachX,hipZ=leg.attachZ;
+          const coxaWorldX=hipX,coxaWorldZ=hipZ;
+          const reach=(leg.front?(isRunning?140:120):100)*PX;
+          const strideMultiplier=leg.front?(isRunning?1.6:1.3):(leg.pair===3?0.8:1.0);
+          const lead=speed*0.14*strideMultiplier;
+          const idealLocal=localIdealFoot(leg,reach,lead);
+          const idealWorld=spiderRoot.localToWorld(idealLocal.clone());
+          const phase=mod(gaitPhase+leg.phaseOffset+(leg.group==='B'?0.5:0),1);
+
+          if(phase<0.65||(speed<=0.05&&leg.isStance)){
+            if(!leg.isStance){
+              leg.currentFoot.copy(leg.targetFoot);
+              leg.plantedFoot.copy(leg.targetFoot);
+              leg.liftHeight=0;
+              addRipple(leg.targetFoot.clone().addScaledVector(surfaceNormal,0.02),surfaceNormal,leg.front?0.52:0.36);
+            }
+            leg.isStance=true;
+            leg.phaseState=leg.front?'PULL':'SUPPORT';
+            leg.swingProgress=0;
+            leg.liftHeight=0;
+            leg.hydraulicExtension+=(1-leg.hydraulicExtension)*(1-Math.pow(0.72,dt*60));
+            leg.currentFoot.copy(leg.plantedFoot);
+            const localFoot=spiderRoot.worldToLocal(leg.plantedFoot.clone());
+            const pullDist=Math.hypot(hipX-localFoot.x,hipZ-localFoot.z);
+            leg.flexionAngle+=(Math.max(0.1,0.45-(pullDist/3.6))-leg.flexionAngle)*(1-Math.pow(0.78,dt*60));
+          }else{
+            if(leg.isStance){
+              leg.isStance=false;
+              leg.phaseState='LIFT';
+              leg.swingStartFoot.copy(leg.currentFoot);
+              leg.targetFoot.copy(idealWorld);
+            }
+            leg.swingProgress=(phase-0.65)/0.35;
+            const t=leg.swingProgress;
+            leg.phaseState=t<0.25?'LIFT':t<0.80?'STRETCH':'TOUCH';
+            const eased=smootherStep(t);
+            leg.currentFoot.lerpVectors(leg.swingStartFoot,leg.targetFoot,eased);
+            leg.liftHeight=Math.sin(Math.PI*t)*(leg.front?17:13)*PX;
+            leg.currentFoot.addScaledVector(surfaceNormal,leg.liftHeight);
+            const hydraulicTarget=1+Math.sin(Math.PI*t)*(leg.front?0.45:0.30);
+            leg.hydraulicExtension+=(hydraulicTarget-leg.hydraulicExtension)*(1-Math.pow(0.72,dt*60));
+            if(t>=0.995){
+              leg.currentFoot.copy(leg.targetFoot);
+              leg.plantedFoot.copy(leg.targetFoot);
+              leg.liftHeight=0;
+              addRipple(leg.targetFoot.clone().addScaledVector(surfaceNormal,0.02),surfaceNormal,leg.front?0.52:0.36);
+            }
+          }
+
+          // The source's alternating front-leg probing, mapped into the 3D
+          // support plane without moving the native pointer target.
+          if(leg.front&&pushingTarget&&speed<0.16){
+            const probePhase=mod(investigationCycle+(leg.id==='R1'?0.5:0),1);
+            let probeReach=0,probeLift=0;
+            if(probePhase<0.38){const u=probePhase/0.38;probeReach=u*u*(3-2*u);probeLift=Math.sin(Math.PI*u)*0.10;}
+            else if(probePhase<0.58)probeReach=1;
+            else{const u=(probePhase-0.58)/0.42;probeReach=1-u*u*(3-2*u);probeLift=Math.sin(Math.PI*u)*0.045;}
+            const probeLocal=new THREE.Vector3(0.28,-BODY_HEIGHT,leg.side*0.16);
+            const probeWorld=spiderRoot.localToWorld(probeLocal);
+            const blended=leg.currentFoot.clone().lerp(probeWorld,probeReach*0.72);
+            blended.addScaledVector(surfaceNormal,probeLift);
+            leg.currentFoot.copy(blended);
+          }
+        }
+      }
+
+      spiderRoot.updateMatrixWorld(true);
+      const C=segmentLengths.coxa,T=segmentLengths.trochanter;
+      for(const leg of legs){
+        const foot=spiderRoot.worldToLocal(leg.currentFoot.clone());
+        const p1=new THREE.Vector3(leg.attachX,-0.055+bodyGroup.position.y,leg.attachZ);
+        const baseAngle=Math.atan2(foot.z-p1.z,foot.x-p1.x);
+        const p2=new THREE.Vector3(p1.x+Math.cos(baseAngle)*C,p1.y-0.035,p1.z+Math.sin(baseAngle)*C);
+        const p3=new THREE.Vector3(p2.x+Math.cos(baseAngle+leg.side*0.12)*T,p2.y-0.025,p2.z+Math.sin(baseAngle+leg.side*0.12)*T);
+
+        const dx=foot.x-p3.x,dz=foot.z-p3.z;
+        const directDist=Math.hypot(dx,dz)||1;
+        const normalX=-dz/directDist,normalZ=dx/directDist;
+        const Lf=segmentLengths.femur*leg.hydraulicExtension;
+        const Lp=segmentLengths.patella,Lt=segmentLengths.tibia,Lm=segmentLengths.metatarsus,Ltars=segmentLengths.tarsus;
+        const maxReach=Lf+Lp+Lt+Lm+Ltars;
+        const bend=leg.side*Math.min(36*PX,Math.max(6*PX,(maxReach-directDist)*0.42));
+        const total=Math.max(0.001,maxReach);
+        const f1=Lf/total,f2=(Lf+Lp)/total,f3=(Lf+Lp+Lt)/total,f4=(Lf+Lp+Lt+Lm)/total;
+        const pointAt=(fraction,bendFactor)=>new THREE.Vector3(
+          p3.x+dx*fraction+normalX*bend*bendFactor,
+          p3.y+(foot.y-p3.y)*fraction,
+          p3.z+dz*fraction+normalZ*bend*bendFactor
+        );
+        const p4=pointAt(f1,1.0);
+        const p5=pointAt(f2,0.58);
+        const p6=pointAt(f3,0.16);
+        const p7=pointAt(f4,-0.08);
+        const points=[p1,p2,p3,p4,p5,p6,p7,foot];
+        for(let i=0;i<7;i++)placeBone(leg.bones[i],points[i],points[i+1]);
+        for(let i=0;i<6;i++)leg.joints[i].position.copy(points[i+1]);
+        leg.foot.position.copy(foot);
+      }
+    }
+
+    // Establish the local frame and seed the feet on the original floor.
+    surfaceNormal.set(0,1,0);
+    applySpiderOrientation();
+    spiderRoot.updateMatrixWorld(true);
+    reseatLegs();
+
+    // ---------------------------------------------------------------------
+    // Main frame loop and responsive sizing.
+    // ---------------------------------------------------------------------
+    const clock=new THREE.Clock();
+    function animate(){
+      requestAnimationFrame(animate);
+      const dt=Math.min(0.04,clock.getDelta());
+      if(mouseInside)idleClock+=dt;
+      if(transition)updateTransition(dt);
+      else updateMovement(dt);
+      applySpiderOrientation();
+      updateLegs(dt);
+      updateRipples(dt);
+      floorGrid.position.x=worldShift.x;
+      floorGrid.position.z=worldShift.z;
+      floorGrid.position.y=0.006;
+      renderer.render(scene,camera);
+    }
+    animate();
+
+    window.addEventListener('resize',()=>{
+      camera.aspect=window.innerWidth/window.innerHeight;
+      camera.updateProjectionMatrix();
+      renderer.setPixelRatio(Math.min(window.devicePixelRatio||1,1.8));
+      renderer.setSize(window.innerWidth,window.innerHeight,false);
+    });
+  </script>
+</body>
+</html>

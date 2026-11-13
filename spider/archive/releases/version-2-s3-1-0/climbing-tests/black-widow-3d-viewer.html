@@ -1,0 +1,538 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="theme-color" content="#08090d" />
+  <title>Black Widow — 3D Crawler</title>
+  <style>
+    :root {
+      color-scheme: dark;
+      --bg: #08090d;
+      --panel: rgba(13, 15, 21, .88);
+      --panel-2: rgba(20, 22, 30, .92);
+      --border: rgba(255,255,255,.09);
+      --text: #eef0f5;
+      --muted: #9298a6;
+      --red: #e32943;
+      --red-soft: rgba(227,41,67,.16);
+    }
+    * { box-sizing: border-box; }
+    html, body { width: 100%; height: 100%; margin: 0; overflow: hidden; background: var(--bg); color: var(--text); font-family: Inter, ui-sans-serif, system-ui, -apple-system, sans-serif; }
+    body { user-select: none; }
+    #stage { position: fixed; inset: 0; }
+    #stage canvas { display: block; width: 100%; height: 100%; touch-action: none; outline: none; }
+    .topbar {
+      position: absolute; z-index: 5; top: 18px; left: 18px; right: 18px;
+      display: flex; align-items: center; justify-content: space-between; gap: 14px;
+      pointer-events: none;
+    }
+    .brand, .top-actions, .view-dock, .hint { pointer-events: auto; }
+    .brand {
+      display: flex; align-items: center; gap: 12px; padding: 11px 15px;
+      border: 1px solid var(--border); border-radius: 15px; background: var(--panel);
+      backdrop-filter: blur(18px); box-shadow: 0 12px 40px rgba(0,0,0,.24);
+    }
+    .mark {
+      width: 35px; height: 35px; display: grid; place-items: center; border-radius: 10px;
+      color: #ff6274; background: var(--red-soft); border: 1px solid rgba(227,41,67,.34);
+      font-size: 17px;
+    }
+    .brand h1 { margin: 0; font: 700 12px/1.3 ui-monospace, SFMono-Regular, Menlo, monospace; letter-spacing: .16em; }
+    .brand p { margin: 3px 0 0; font: 10px/1.2 ui-monospace, SFMono-Regular, Menlo, monospace; color: var(--muted); letter-spacing: .08em; }
+    .top-actions { display: flex; gap: 8px; align-items: center; }
+    button {
+      color: var(--text); background: var(--panel); border: 1px solid var(--border); border-radius: 11px;
+      padding: 10px 13px; font: 600 11px/1 ui-monospace, SFMono-Regular, Menlo, monospace;
+      letter-spacing: .04em; cursor: pointer; backdrop-filter: blur(18px); transition: .18s ease;
+    }
+    button:hover { background: var(--panel-2); border-color: rgba(255,255,255,.2); transform: translateY(-1px); }
+    button.active { color: #ff7484; border-color: rgba(227,41,67,.55); background: var(--red-soft); }
+    button:focus-visible { outline: 2px solid #ff687a; outline-offset: 2px; }
+    .view-dock {
+      position: absolute; z-index: 5; left: 50%; bottom: 22px; transform: translateX(-50%);
+      display: flex; flex-wrap: wrap; justify-content: center; gap: 6px; max-width: calc(100vw - 28px);
+      padding: 8px; border: 1px solid var(--border); border-radius: 15px; background: var(--panel);
+      backdrop-filter: blur(18px); box-shadow: 0 12px 40px rgba(0,0,0,.28);
+    }
+    .view-dock button { min-width: 62px; padding: 10px 12px; background: transparent; }
+    .view-dock button.active { background: var(--red-soft); }
+    .hint {
+      position: absolute; z-index: 4; right: 19px; bottom: 27px; max-width: 245px;
+      color: var(--muted); font: 10px/1.65 ui-monospace, SFMono-Regular, Menlo, monospace;
+      text-align: right; pointer-events: none; text-shadow: 0 1px 8px #000;
+    }
+    .readout {
+      position: absolute; z-index: 4; left: 19px; bottom: 27px; padding: 10px 12px;
+      border: 1px solid var(--border); border-radius: 11px; background: rgba(10,12,17,.7);
+      backdrop-filter: blur(12px); font: 10px/1.6 ui-monospace, SFMono-Regular, Menlo, monospace; color: var(--muted);
+      pointer-events: none;
+    }
+    .readout strong { color: #f2f2f5; font-weight: 600; }
+    .readout .live { color: #ff6579; }
+    #loading {
+      position: absolute; inset: 0; z-index: 10; display: grid; place-items: center;
+      background: #08090d; color: #c8cbd2; font: 11px ui-monospace, monospace; letter-spacing: .12em;
+      transition: opacity .35s ease;
+    }
+    #loading.hidden { opacity: 0; pointer-events: none; }
+    #error {
+      display: none; position: absolute; inset: 20px; z-index: 20; align-items: center; justify-content: center;
+      color: #f3c6cc; font: 13px/1.6 ui-monospace, monospace; text-align: center; white-space: pre-wrap;
+    }
+    @media (max-width: 700px) {
+      .topbar { top: 10px; left: 10px; right: 10px; align-items: flex-start; }
+      .brand { padding: 9px 10px; gap: 8px; }
+      .mark { width: 30px; height: 30px; }
+      .brand h1 { font-size: 10px; }
+      .brand p { font-size: 9px; }
+      .top-actions { gap: 5px; }
+      .top-actions button { padding: 9px 10px; font-size: 9px; }
+      .view-dock { bottom: 10px; gap: 4px; padding: 6px; }
+      .view-dock button { min-width: 48px; padding: 9px 8px; font-size: 9px; }
+      .hint { display: none; }
+      .readout { left: 10px; bottom: 70px; font-size: 9px; }
+    }
+  </style>
+  <script type="importmap">
+    {
+      "imports": {
+        "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js",
+        "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/"
+      }
+    }
+  </script>
+</head>
+<body>
+  <div id="stage" aria-label="Interactive three-dimensional black widow spider viewer"></div>
+  <div id="loading">BUILDING 3D SPECIMEN…</div>
+  <div id="error"></div>
+
+  <header class="topbar">
+    <div class="brand">
+      <div class="mark">✳</div>
+      <div>
+        <h1>BLACK WIDOW / 3D SPECIMEN</h1>
+        <p>LATRODECTUS-INSPIRED • ANIMATED MODEL</p>
+      </div>
+    </div>
+    <div class="top-actions">
+      <button id="motionBtn" class="active" type="button">Ⅱ PAUSE</button>
+      <button id="resetBtn" type="button">RESET VIEW</button>
+    </div>
+  </header>
+
+  <div class="readout">
+    <div>MODEL <strong>PROCEDURAL 3D</strong></div>
+    <div>LEGS <strong>08 ARTICULATED</strong></div>
+    <div>GAIT <strong class="live" id="gaitState">WALK CYCLE</strong></div>
+  </div>
+
+  <nav class="view-dock" aria-label="Camera viewpoints">
+    <button data-view="front" class="active" type="button">FRONT</button>
+    <button data-view="chest" type="button">CHEST</button>
+    <button data-view="left" type="button">LEFT</button>
+    <button data-view="right" type="button">RIGHT</button>
+    <button data-view="back" type="button">BACK</button>
+    <button data-view="top" type="button">TOP</button>
+    <button data-view="bottom" type="button">UNDERSIDE</button>
+  </nav>
+
+  <div class="hint">DRAG · ORBIT CAMERA<br>SCROLL · ZOOM<br>RIGHT-DRAG · PAN</div>
+
+  <script type="module">
+    import * as THREE from 'three';
+    import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+
+    const stage = document.getElementById('stage');
+    const loading = document.getElementById('loading');
+    const errorBox = document.getElementById('error');
+
+    try {
+      // ---------- Renderer, scene and camera ----------
+      const scene = new THREE.Scene();
+      scene.background = new THREE.Color(0x08090d);
+      scene.fog = new THREE.Fog(0x08090d, 12, 28);
+
+      const camera = new THREE.PerspectiveCamera(38, window.innerWidth / window.innerHeight, 0.1, 100);
+      camera.position.set(0, 3.15, 8.5);
+
+      const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: false });
+      renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
+      renderer.setSize(window.innerWidth, window.innerHeight);
+      renderer.outputColorSpace = THREE.SRGBColorSpace;
+      renderer.toneMapping = THREE.ACESFilmicToneMapping;
+      renderer.toneMappingExposure = 1.15;
+      renderer.shadowMap.enabled = true;
+      renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+      stage.appendChild(renderer.domElement);
+
+      const controls = new OrbitControls(camera, renderer.domElement);
+      controls.target.set(0, 1.0, -0.08);
+      controls.enableDamping = true;
+      controls.dampingFactor = 0.065;
+      controls.minDistance = 3.4;
+      controls.maxDistance = 16;
+      controls.maxPolarAngle = Math.PI - 0.001;
+      controls.update();
+
+      // ---------- Neutral studio lighting ----------
+      scene.add(new THREE.HemisphereLight(0xcbd7ee, 0x171016, 1.15));
+      const keyLight = new THREE.DirectionalLight(0xffe9e7, 3.0);
+      keyLight.position.set(-4.5, 8, 5.5);
+      keyLight.castShadow = true;
+      keyLight.shadow.mapSize.set(2048, 2048);
+      keyLight.shadow.camera.left = -6;
+      keyLight.shadow.camera.right = 6;
+      keyLight.shadow.camera.top = 6;
+      keyLight.shadow.camera.bottom = -6;
+      keyLight.shadow.bias = -0.00025;
+      scene.add(keyLight);
+      const rimLight = new THREE.DirectionalLight(0x8aa8ff, 2.0);
+      rimLight.position.set(5, 4, -5);
+      scene.add(rimLight);
+      const redFill = new THREE.PointLight(0x8b132a, 22, 8, 2);
+      redFill.position.set(0, 2.2, -2.7);
+      scene.add(redFill);
+
+      // Ground plane and subtle orthogonal grid.
+      const floor = new THREE.Mesh(
+        new THREE.PlaneGeometry(200, 200),
+        new THREE.MeshStandardMaterial({ color: 0x090b10, roughness: 0.92, metalness: 0.04 })
+      );
+      floor.rotation.x = -Math.PI / 2;
+      floor.position.y = -0.035;
+      floor.receiveShadow = true;
+      scene.add(floor);
+      const grid = new THREE.GridHelper(30, 60, 0x252a35, 0x171b24);
+      grid.position.y = -0.022;
+      grid.material.transparent = true;
+      grid.material.opacity = 0.38;
+      scene.add(grid);
+
+      // ---------- Materials ----------
+      const shellMat = new THREE.MeshPhysicalMaterial({
+        color: 0x090a0d, metalness: 0.18, roughness: 0.2,
+        clearcoat: 1, clearcoatRoughness: 0.12
+      });
+      const shellDarkMat = new THREE.MeshPhysicalMaterial({
+        color: 0x17191f, metalness: 0.22, roughness: 0.26,
+        clearcoat: 0.8, clearcoatRoughness: 0.18
+      });
+      const jointMat = new THREE.MeshPhysicalMaterial({
+        color: 0x050608, metalness: 0.12, roughness: 0.27, clearcoat: 0.8
+      });
+      const redMat = new THREE.MeshPhysicalMaterial({
+        color: 0xb90d2a, emissive: 0x3a0008, emissiveIntensity: 0.34,
+        metalness: 0.06, roughness: 0.3, clearcoat: 0.9, side: THREE.DoubleSide
+      });
+      const eyeMat = new THREE.MeshPhysicalMaterial({
+        color: 0x010204, metalness: 0.1, roughness: 0.06, clearcoat: 1
+      });
+      const highlightMat = new THREE.MeshBasicMaterial({ color: 0xffffff });
+      const spineMat = new THREE.MeshStandardMaterial({ color: 0x101116, roughness: 0.42, metalness: 0.12 });
+
+      const spider = new THREE.Group();
+      scene.add(spider);
+      const body = new THREE.Group();
+      spider.add(body);
+
+      function ellipsoid(parent, material, position, scale, segments = 32) {
+        const mesh = new THREE.Mesh(new THREE.SphereGeometry(1, segments, Math.max(16, Math.floor(segments * 0.65))), material);
+        mesh.position.set(...position);
+        mesh.scale.set(...scale);
+        mesh.castShadow = true;
+        mesh.receiveShadow = true;
+        parent.add(mesh);
+        return mesh;
+      }
+
+      function makeCylinder(parent, radiusTop, radiusBottom, material, radial = 10) {
+        const mesh = new THREE.Mesh(new THREE.CylinderGeometry(radiusTop, radiusBottom, 1, radial, 1), material);
+        mesh.castShadow = true;
+        mesh.receiveShadow = true;
+        parent.add(mesh);
+        return mesh;
+      }
+
+      const yAxis = new THREE.Vector3(0, 1, 0);
+      function placeBetween(mesh, a, b) {
+        const start = new THREE.Vector3(a.x, a.y, a.z);
+        const end = new THREE.Vector3(b.x, b.y, b.z);
+        const direction = new THREE.Vector3().subVectors(end, start);
+        const length = Math.max(0.001, direction.length());
+        mesh.position.copy(start).add(end).multiplyScalar(0.5);
+        mesh.quaternion.setFromUnitVectors(yAxis, direction.normalize());
+        mesh.scale.set(1, length, 1);
+      }
+
+      // ---------- Main body: cephalothorax and rounded abdomen ----------
+      // Abdomen is deliberately larger and more globose than the cephalothorax.
+      const abdomen = ellipsoid(body, shellMat, [0, 1.22, -0.91], [0.72, 0.57, 0.88], 64);
+      const abdomenDorsalPlate = ellipsoid(body, shellDarkMat, [0, 1.62, -0.91], [0.48, 0.16, 0.62], 48);
+      abdomenDorsalPlate.scale.set(0.62, 0.13, 0.72);
+
+      // Distinct red dorsal markings; the ventral hourglass is added below.
+      function topOfAbdomen(zOffset, xOffset = 0) {
+        const nx = xOffset / 0.72;
+        const nz = zOffset / 0.88;
+        return 1.22 + 0.57 * Math.sqrt(Math.max(0.08, 1 - nx * nx - nz * nz));
+      }
+      [
+        [-0.19, -0.40, 0.075, 0.13], [0.19, -0.40, 0.075, 0.13],
+        [-0.16, -0.77, 0.085, 0.15], [0.16, -0.77, 0.085, 0.15],
+        [-0.12, -1.15, 0.07, 0.12], [0.12, -1.15, 0.07, 0.12]
+      ].forEach(([x, z, sx, sz]) => {
+        const localZ = z + 0.91;
+        ellipsoid(body, redMat, [x, topOfAbdomen(localZ, x) + 0.012, z], [sx, 0.018, sz], 24);
+      });
+
+      // Underside red hourglass, oriented toward the ventral view.
+      const hourglassShape = new THREE.Shape();
+      hourglassShape.moveTo(-0.18, 0.42);
+      hourglassShape.bezierCurveTo(-0.04, 0.32, -0.075, 0.13, -0.035, 0.02);
+      hourglassShape.lineTo(-0.15, -0.19);
+      hourglassShape.bezierCurveTo(-0.21, -0.31, -0.13, -0.45, 0, -0.34);
+      hourglassShape.bezierCurveTo(0.13, -0.45, 0.21, -0.31, 0.15, -0.19);
+      hourglassShape.lineTo(0.035, 0.02);
+      hourglassShape.bezierCurveTo(0.075, 0.13, 0.04, 0.32, 0.18, 0.42);
+      hourglassShape.quadraticCurveTo(0, 0.31, -0.18, 0.42);
+      const hourglass = new THREE.Mesh(new THREE.ShapeGeometry(hourglassShape, 20), redMat);
+      hourglass.rotation.x = Math.PI / 2;
+      hourglass.position.set(0, 0.66, -0.92);
+      hourglass.scale.set(0.72, 0.78, 1);
+      hourglass.material.side = THREE.DoubleSide;
+      body.add(hourglass);
+      // Small red ventral accent spots beside the hourglass.
+      ellipsoid(body, redMat, [-0.20, 0.70, -0.90], [0.07, 0.018, 0.11], 20);
+      ellipsoid(body, redMat, [0.20, 0.70, -0.90], [0.07, 0.018, 0.11], 20);
+
+      // Cephalothorax (prosoma), with a subtle raised carapace and sternum.
+      ellipsoid(body, shellMat, [0, 1.19, 0.29], [0.52, 0.27, 0.68], 56);
+      ellipsoid(body, shellDarkMat, [0, 1.365, 0.29], [0.37, 0.105, 0.49], 48);
+      ellipsoid(body, jointMat, [0, 0.94, 0.25], [0.30, 0.12, 0.43], 36);
+      // Waist / pedicel joining the two body sections.
+      const pedicel = makeCylinder(body, 0.12, 0.12, shellDarkMat, 20);
+      placeBetween(pedicel, { x: 0, y: 1.2, z: -0.19 }, { x: 0, y: 1.2, z: -0.35 });
+
+      // Eye cluster: eight glossy eyes at the front, with tiny catchlights.
+      const eyeLayout = [
+        [-0.235, 1.37, 0.82, 0.043], [-0.145, 1.445, 0.865, 0.039],
+        [-0.055, 1.47, 0.89, 0.035], [0.055, 1.47, 0.89, 0.035],
+        [0.145, 1.445, 0.865, 0.039], [0.235, 1.37, 0.82, 0.043],
+        [-0.13, 1.30, 0.88, 0.033], [0.13, 1.30, 0.88, 0.033]
+      ];
+      eyeLayout.forEach(([x, y, z, r]) => {
+        ellipsoid(body, eyeMat, [x, y, z], [r, r, r * 0.75], 18);
+        ellipsoid(body, highlightMat, [x - r * 0.25, y + r * 0.28, z + r * 0.54], [r * 0.21, r * 0.21, r * 0.10], 12);
+      });
+
+      // Chelicerae and curved fangs.
+      [-1, 1].forEach(side => {
+        const chelicera = ellipsoid(body, shellDarkMat, [side * 0.115, 0.99, 0.83], [0.095, 0.14, 0.12], 24);
+        chelicera.rotation.z = side * -0.18;
+        const fang = makeCylinder(body, 0.012, 0.052, jointMat, 12);
+        placeBetween(fang,
+          { x: side * 0.12, y: 0.96, z: 0.90 },
+          { x: side * 0.15, y: 0.79, z: 1.00 });
+      });
+
+      // Spinnerets at the posterior end.
+      [-1, 0, 1].forEach((offset, i) => {
+        const spinneret = makeCylinder(body, 0.022, 0.045, jointMat, 10);
+        placeBetween(spinneret,
+          { x: offset * 0.055, y: 1.08, z: -1.65 },
+          { x: offset * 0.085, y: 1.02 - Math.abs(offset) * 0.015, z: -1.82 - (i === 1 ? 0.03 : 0) });
+      });
+
+      // ---------- Eight articulated legs ----------
+      // Coordinates are mirrored around the body's center line. Each leg has
+      // visible coxa, femur, patella, tibia, metatarsus and tarsus sections.
+      const legPairs = [
+        { z: 0.48, footZ: 1.28, reach: 2.20 },
+        { z: 0.17, footZ: 0.48, reach: 2.12 },
+        { z: -0.18, footZ: -0.52, reach: 2.13 },
+        { z: -0.48, footZ: -1.26, reach: 2.28 }
+      ];
+      const legs = [];
+      const legSegmentMats = [shellDarkMat, jointMat, shellMat, shellDarkMat, shellMat, jointMat];
+      const legRadii = [
+        [0.070, 0.060], [0.062, 0.050], [0.052, 0.039],
+        [0.041, 0.030], [0.030, 0.022], [0.022, 0.009]
+      ];
+
+      for (let pair = 0; pair < 4; pair++) {
+        for (const side of [-1, 1]) {
+          const segments = legRadii.map((radii, idx) => makeCylinder(body, radii[0], radii[1], legSegmentMats[idx], 12));
+          const joints = [
+            ellipsoid(body, jointMat, [0, 0, 0], [0.085, 0.085, 0.085], 16),
+            ellipsoid(body, shellDarkMat, [0, 0, 0], [0.073, 0.073, 0.073], 16),
+            ellipsoid(body, jointMat, [0, 0, 0], [0.060, 0.060, 0.060], 16),
+            ellipsoid(body, shellDarkMat, [0, 0, 0], [0.047, 0.047, 0.047], 16),
+            ellipsoid(body, jointMat, [0, 0, 0], [0.036, 0.036, 0.036], 16)
+          ];
+          // Fine short spines along the tibia, each a tiny tapered 3D cone.
+          const spines = [];
+          for (let s = 0; s < 4; s++) {
+            const spine = new THREE.Mesh(new THREE.ConeGeometry(0.018, 0.095, 6), spineMat);
+            spine.castShadow = true;
+            body.add(spine);
+            spines.push(spine);
+          }
+          legs.push({ pair, side, segments, joints, spines, config: legPairs[pair] });
+        }
+      }
+
+      // Short, animated pedipalps near the mouth.
+      const palps = [-1, 1].map(side => {
+        const a = makeCylinder(body, 0.035, 0.045, shellDarkMat, 10);
+        const b = makeCylinder(body, 0.018, 0.032, jointMat, 10);
+        const joint = ellipsoid(body, jointMat, [0, 0, 0], [0.05, 0.05, 0.05], 14);
+        return { side, a, b, joint };
+      });
+
+      // Subtle surface hairs on the abdomen, kept sparse so the glossy shell stays readable.
+      for (let i = 0; i < 16; i++) {
+        const angle = (i / 16) * Math.PI * 2;
+        const z = -0.91 + Math.cos(angle) * 0.57;
+        const x = Math.sin(angle) * 0.54;
+        const y = topOfAbdomen(z + 0.91, x) - 0.03;
+        const hair = new THREE.Mesh(new THREE.CylinderGeometry(0.0025, 0.004, 0.085, 5), spineMat);
+        hair.position.set(x, y + 0.025, z);
+        hair.rotation.z = Math.sin(angle) * 0.45;
+        hair.rotation.x = Math.cos(angle) * 0.3;
+        body.add(hair);
+      }
+
+      // ---------- Procedural gait / joint updates ----------
+      let walking = true;
+      let elapsed = 0;
+      const smoothstep = t => t * t * (3 - 2 * t);
+      function updateLeg(leg, time) {
+        const { pair, side, config: cfg } = leg;
+        // Alternating diagonal leg groups create a stable spider-like gait.
+        const phase = time * 4.3 + (pair % 2) * Math.PI + (side < 0 ? Math.PI : 0);
+        const swing = Math.sin(phase);
+        const lift = Math.max(0, Math.cos(phase)) * 0.19;
+        const stride = swing * 0.18;
+        const hip = { x: side * 0.37, y: 1.12, z: cfg.z };
+        const coxa = { x: side * 0.62, y: 1.10 + lift * 0.10, z: cfg.z + (pair < 2 ? 0.06 : -0.06) };
+        const knee1 = { x: side * 1.00, y: 1.29 + lift * 0.18, z: cfg.z + (cfg.footZ - cfg.z) * 0.27 + stride * 0.25 };
+        const knee2 = { x: side * 1.36, y: 0.96 + lift * 0.20, z: cfg.z + (cfg.footZ - cfg.z) * 0.50 + stride * 0.45 };
+        const knee3 = { x: side * 1.66, y: 0.57 + lift * 0.42, z: cfg.z + (cfg.footZ - cfg.z) * 0.75 + stride * 0.70 };
+        const knee4 = { x: side * (cfg.reach - 0.18), y: 0.25 + lift * 0.72, z: cfg.footZ + stride * 0.92 };
+        const foot = { x: side * cfg.reach, y: 0.085 + lift, z: cfg.footZ + stride };
+        const points = [hip, coxa, knee1, knee2, knee3, knee4, foot];
+
+        for (let i = 0; i < leg.segments.length; i++) placeBetween(leg.segments[i], points[i], points[i + 1]);
+        for (let i = 0; i < leg.joints.length; i++) {
+          leg.joints[i].position.set(points[i + 1].x, points[i + 1].y, points[i + 1].z);
+        }
+        // Spines face outwards from the distal tibia rather than floating in space.
+        const tibiaStart = new THREE.Vector3(knee2.x, knee2.y, knee2.z);
+        const tibiaEnd = new THREE.Vector3(knee3.x, knee3.y, knee3.z);
+        const tibiaDir = new THREE.Vector3().subVectors(tibiaEnd, tibiaStart).normalize();
+        const outward = new THREE.Vector3(side * 0.65, 0.3, -0.15).normalize();
+        leg.spines.forEach((spine, i) => {
+          const t = 0.18 + i * 0.20;
+          spine.position.copy(tibiaStart).lerp(tibiaEnd, t).addScaledVector(outward, 0.045);
+          spine.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), outward.clone().addScaledVector(tibiaDir, 0.15).normalize());
+        });
+      }
+
+      function updatePalps(time) {
+        palps.forEach(p => {
+          const sway = Math.sin(time * 5 + (p.side > 0 ? Math.PI : 0)) * 0.035;
+          const root = { x: p.side * 0.17, y: 1.00, z: 0.82 };
+          const mid = { x: p.side * (0.29 + sway), y: 0.91 + Math.abs(sway) * 0.3, z: 1.00 };
+          const tip = { x: p.side * (0.32 + sway * 1.4), y: 0.83, z: 1.14 };
+          placeBetween(p.a, root, mid);
+          placeBetween(p.b, mid, tip);
+          p.joint.position.set(mid.x, mid.y, mid.z);
+        });
+      }
+
+      // ---------- Camera viewpoints ----------
+      const target = new THREE.Vector3(0, 1.0, -0.08);
+      const views = {
+        front:   { pos: [0, 3.05, 8.7], up: [0, 1, 0], target: [0, 1.0, -0.08] },
+        chest:   { pos: [0, 1.42, 8.1], up: [0, 1, 0], target: [0, 1.05, -0.12] },
+        left:    { pos: [-8.6, 2.85, -0.05], up: [0, 1, 0], target: [0, 1.0, -0.08] },
+        right:   { pos: [8.6, 2.85, -0.05], up: [0, 1, 0], target: [0, 1.0, -0.08] },
+        back:    { pos: [0, 3.05, -8.7], up: [0, 1, 0], target: [0, 1.0, -0.08] },
+        top:     { pos: [0, 10.2, -0.08], up: [0, 0, -1], target: [0, 0.9, -0.08] },
+        bottom:  { pos: [0, -8.4, -0.08], up: [0, 0, 1], target: [0, 1.0, -0.08] }
+      };
+      let cameraTween = null;
+      function setView(name) {
+        const view = views[name];
+        if (!view) return;
+        camera.up.set(...view.up);
+        cameraTween = {
+          start: camera.position.clone(),
+          end: new THREE.Vector3(...view.pos),
+          startTarget: controls.target.clone(),
+          endTarget: new THREE.Vector3(...view.target),
+          progress: 0
+        };
+        document.querySelectorAll('[data-view]').forEach(btn => btn.classList.toggle('active', btn.dataset.view === name));
+      }
+      document.querySelectorAll('[data-view]').forEach(btn => btn.addEventListener('click', () => setView(btn.dataset.view)));
+      document.getElementById('resetBtn').addEventListener('click', () => setView('front'));
+      document.getElementById('motionBtn').addEventListener('click', (event) => {
+        walking = !walking;
+        event.currentTarget.textContent = walking ? 'Ⅱ PAUSE' : '▶ WALK';
+        event.currentTarget.classList.toggle('active', walking);
+        document.getElementById('gaitState').textContent = walking ? 'WALK CYCLE' : 'REST POSE';
+      });
+
+      // ---------- Render loop ----------
+      const clock = new THREE.Clock();
+      function animate() {
+        requestAnimationFrame(animate);
+        const dt = Math.min(clock.getDelta(), 0.04);
+        if (walking) elapsed += dt;
+        const gaitTime = walking ? elapsed : 0;
+
+        legs.forEach(leg => updateLeg(leg, gaitTime));
+        updatePalps(gaitTime);
+        if (walking) {
+          body.position.y = Math.sin(elapsed * 8.6) * 0.018;
+          body.rotation.z = Math.sin(elapsed * 4.3) * 0.009;
+          abdomen.rotation.x = Math.sin(elapsed * 4.3 + 0.5) * 0.012;
+        } else {
+          body.position.y *= 0.92;
+          body.rotation.z *= 0.92;
+          abdomen.rotation.x *= 0.92;
+        }
+
+        if (cameraTween) {
+          cameraTween.progress = Math.min(1, cameraTween.progress + dt * 2.7);
+          const k = smoothstep(cameraTween.progress);
+          camera.position.lerpVectors(cameraTween.start, cameraTween.end, k);
+          controls.target.lerpVectors(cameraTween.startTarget, cameraTween.endTarget, k);
+          if (cameraTween.progress >= 1) cameraTween = null;
+        }
+        controls.update();
+        renderer.render(scene, camera);
+      }
+      animate();
+
+      window.addEventListener('resize', () => {
+        camera.aspect = window.innerWidth / window.innerHeight;
+        camera.updateProjectionMatrix();
+        renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
+        renderer.setSize(window.innerWidth, window.innerHeight);
+      });
+
+      setView('front');
+      loading.classList.add('hidden');
+    } catch (error) {
+      console.error(error);
+      errorBox.style.display = 'flex';
+      errorBox.textContent = 'The 3D viewer could not start.\nCheck your internet connection and open this HTML in a modern browser that supports WebGL and JavaScript modules.\n\n' + (error?.message || String(error));
+      loading.classList.add('hidden');
+    }
+  </script>
+</body>
+</html>

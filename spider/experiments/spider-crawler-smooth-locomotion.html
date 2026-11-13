@@ -1,0 +1,976 @@
+<!DOCTYPE html>
+<html lang="en" class="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Crawlers — Slava Rybin</title>
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Tone.js for Sonic Synthesizer Feedback -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/tone/14.8.49/Tone.js"></script>
+    <script>
+        tailwind.config = {
+            darkMode: 'class',
+            theme: {
+                extend: {
+                    colors: {
+                        obsidian: '#050505',
+                        darkpanel: '#0c0d10',
+                        darkborder: '#1a1d24',
+                        crawlerYellow: '#d8f020',
+                    },
+                    fontFamily: {
+                        mono: ['JetBrains Mono', 'Courier New', 'monospace'],
+                        sans: ['Inter', 'sans-serif'],
+                    }
+                }
+            }
+        }
+    </script>
+    <!-- FontAwesome & Google Fonts -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@300;400;500;700&display=swap" rel="stylesheet">
+    <style>
+        body {
+            background-color: #08080a;
+            color: #d1d5db;
+            font-family: 'Inter', sans-serif;
+            overflow-x: hidden;
+            user-select: none;
+        }
+        canvas {
+            display: block;
+            touch-action: none;
+        }
+        /* Grid background pattern */
+        .bg-grid {
+            background-size: 50px 50px;
+            background-image: 
+                linear-gradient(to right, rgba(255, 255, 255, 0.02) 1px, transparent 1px),
+                linear-gradient(to bottom, rgba(255, 255, 255, 0.02) 1px, transparent 1px);
+        }
+        /* Custom scrollbar */
+        ::-webkit-scrollbar {
+            width: 6px;
+        }
+        ::-webkit-scrollbar-track {
+            background: #08080a;
+        }
+        ::-webkit-scrollbar-thumb {
+            background: #1f242d;
+            border-radius: 3px;
+        }
+        ::-webkit-scrollbar-thumb:hover {
+            background: #00f0ff;
+        }
+        .glow-box {
+            box-shadow: 0 0 20px rgba(0, 240, 255, 0.15);
+        }
+    </style>
+</head>
+<body class="relative min-h-screen bg-grid flex flex-col">
+
+    <!-- Background Dynamic Canvas for Kinetic Creature -->
+    <div class="fixed inset-0 z-0 pointer-events-auto">
+        <canvas id="crawler-canvas" class="w-full h-full"></canvas>
+    </div>
+
+    <!-- UI Overlay Navigation & Control Header -->
+    <header class="relative z-10 p-4 lg:p-6 flex flex-wrap items-center justify-between gap-4 pointer-events-auto">
+        <div class="flex items-center space-x-4 backdrop-blur-md bg-darkpanel/90 p-3 rounded-2xl border border-darkborder">
+            <div class="w-8 h-8 rounded-lg bg-yellow-400/10 border border-yellow-400/40 flex items-center justify-center text-yellow-300 font-mono text-sm font-bold">
+                <i class="fa-solid fa-spider"></i>
+            </div>
+            <div>
+                <h1 class="text-sm font-bold tracking-wider text-white font-mono">CRAWLERS</h1>
+                <div class="flex items-center space-x-2 text-[11px] font-mono text-gray-400">
+                    <span id="status-dot" class="w-2.5 h-2.5 rounded-full bg-yellow-400/50"></span>
+                    <span id="status-text">Prey Tracked / Resting</span>
+                </div>
+            </div>
+        </div>
+
+        <!-- Action Buttons -->
+        <div class="flex items-center space-x-3">
+            <button onclick="togglePause()" id="pause-btn" class="px-3 py-2 bg-darkpanel/90 border border-darkborder rounded-xl text-xs font-mono text-yellow-300 flex items-center space-x-2 transition hover:bg-white/5">
+                <i class="fa-solid fa-pause" id="pause-icon"></i>
+                <span id="pause-label">Pause</span>
+            </button>
+            <button onclick="toggleAudio()" id="audio-btn" class="px-3 py-2 bg-darkpanel/90 border border-darkborder rounded-xl text-xs font-mono text-yellow-300 flex items-center space-x-2 transition hover:bg-white/5">
+                <i class="fa-solid fa-volume-high" id="audio-icon"></i>
+                <span id="audio-label">Sonic Synth: ON</span>
+            </button>
+            <button onclick="toggleLegPanel()" class="px-3 py-2 bg-darkpanel/90 border border-darkborder rounded-xl text-xs font-mono text-yellow-300 flex items-center space-x-2 transition hover:bg-white/5">
+                <i class="fa-solid fa-code-branch"></i>
+                <span>Autotomy / Legs</span>
+            </button>
+            <button onclick="toggleInfoModal()" class="px-4 py-2 bg-yellow-400/10 hover:bg-yellow-400/20 border border-yellow-400/40 rounded-xl text-xs font-mono text-yellow-300 font-bold flex items-center space-x-2 transition">
+                <i class="fa-solid fa-circle-info"></i>
+                <span>About & Guide</span>
+            </button>
+        </div>
+    </header>
+
+    <!-- Leg Autotomy Toggle Bar -->
+    <div id="leg-panel" class="relative z-10 mx-4 lg:mx-6 mb-2 p-3 backdrop-blur-md bg-darkpanel/90 border border-darkborder rounded-2xl flex flex-wrap items-center justify-between gap-2 text-xs font-mono hidden pointer-events-auto">
+        <span class="text-gray-400 flex items-center gap-1.5"><i class="fa-solid fa-scissors text-yellow-300"></i> Autotomy Leg Toggles (Click to shed/restore limb):</span>
+        <div id="leg-buttons" class="flex flex-wrap gap-1.5"></div>
+    </div>
+
+    <!-- Project Description & Bookmarklet Modal -->
+    <div id="info-modal" class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-md hidden pointer-events-auto overflow-y-auto">
+        <div class="bg-darkpanel border border-darkborder w-full max-w-3xl rounded-3xl p-6 md:p-8 space-y-6 shadow-2xl my-8">
+            <div class="flex items-center justify-between border-b border-darkborder pb-4">
+                <div>
+                    <h2 class="text-base md:text-lg font-bold text-white font-mono tracking-tight">Digital creature living in your browser</h2>
+                    <p class="text-xs text-yellow-300 font-mono">Crawlers by Slava Rybin</p>
+                </div>
+                <button onclick="toggleInfoModal()" class="text-gray-400 hover:text-white transition">
+                    <i class="fa-solid fa-xmark text-lg"></i>
+                </button>
+            </div>
+
+            <!-- Concept Text -->
+            <div class="space-y-4 text-xs md:text-sm text-gray-300 leading-relaxed font-sans">
+                <p>
+                    <strong>Crawlers</strong> is a kinematic, interactive work with feedback loops on multiple levels. Its motion system is a mix of algorithmic and nature-inspired distributed models, inviting viewers to become curious about the underlying mechanisms. The look is similarly balanced: the point, square, and circle combine rigid technical expression with dynamic, lifelike movement.
+                </p>
+                <p>
+                    The page interaction is an attempt to blur the boundaries between the artwork and the viewer, while also reflecting on the timely topics of web crawlers, bots, and data collection. The page generation introduces a simple generative system, a boiled-down LLM predictor, offering a chance to feel what machine learning is at its core.
+                </p>
+                <p class="italic text-gray-400">
+                    In the AI agent era, we often find ourselves personifying probabilistic algorithms. The work encourages reflection on this and deeper thought about what is alive, what is not, and what we are. How are we different from the machine?
+                </p>
+                <p>
+                    Each artwork takes the form of a unique digital creature inspired by the anatomy and movement of spiders, centipedes, and other crawling organisms. These creatures inhabit an interactive website modeled after the familiar structure of Wikipedia, a space traditionally associated with the organization and accumulation of human knowledge. Released from its enclosure, each crawler begins exploring the page, responding to words, images, and hyperlinks as the viewer guides its movement through the browser. Some move slowly and methodically, others race across the screen. Some connect words through intricate webs of relationships, while others scatter paragraphs into fragmented arrangements. Their movements also produce sound, turning the act of gathering information into an improvised musical performance. Each crawler has its own visual and sonic behavior, making the website both an ecosystem and an instrument.
+                </p>
+                <p>
+                    As the creatures explore, the information they encounter becomes material for generating new content, which accumulates beneath the original page. Scrolling reveals further text to be explored, processed, and transformed, creating a potentially endless cycle in which information produces more information. The distinction between reading and writing begins to dissolve. What initially appears to be an encyclopedia gradually becomes an unstable, self-generating archive, where knowledge is no longer simply preserved but continually reorganized and expanded through computational processes.
+                </p>
+            </div>
+
+            <!-- How to Interact Instructions -->
+            <div class="border-t border-darkborder pt-4 space-y-4 font-mono text-xs">
+                <h3 class="text-sm font-bold text-white flex items-center space-x-2">
+                    <i class="fa-solid fa-compass text-yellow-300"></i>
+                    <span>How to Interact with Your Crawler</span>
+                </h3>
+
+                <div class="space-y-4 bg-obsidian p-5 rounded-2xl border border-darkborder text-gray-300">
+                    <div>
+                        <span class="text-yellow-300 font-bold block mb-1">1. Wake up your crawler</span>
+                        <p class="text-gray-400">Open your NFT to find your crawler sleeping on its generated webpage. Interact to wake it up and guide its movement.</p>
+                    </div>
+
+                    <div>
+                        <span class="text-yellow-300 font-bold block mb-1">2. Take your crawler for a walk</span>
+                        <p class="text-gray-400">Save your crawler as a browser bookmark to explore other websites.</p>
+                        
+                        <div class="my-3 p-3 bg-darkpanel rounded-xl border border-darkborder space-y-2">
+                            <p class="text-white font-semibold">Easy way:</p>
+                            <p class="text-gray-400">Drag the Bookmark button below directly to your browser's bookmarks bar.</p>
+                            
+                            <div class="py-2 flex items-center gap-3">
+                                <a id="bookmarklet-btn" href="javascript:(function(){const s=document.createElement('script');s.src='https://cdn.jsdelivr.net/gh/slavarybin/crawler-inject/crawler.js';document.body.appendChild(s);})();" 
+                                   onclick="event.preventDefault(); copyBookmarkletCode();" 
+                                   class="px-5 py-2.5 bg-yellow-300 text-black font-extrabold rounded-xl shadow-lg hover:bg-yellow-400 transition flex items-center space-x-2 cursor-grab active:cursor-grabbing">
+                                    <i class="fa-solid fa-bookmark"></i>
+                                    <span>Drag to Bookmarks Bar: [ 🕷️ Crawler ]</span>
+                                </a>
+                            </div>
+
+                            <p class="text-white font-semibold pt-2">Alternative method:</p>
+                            <ol class="list-decimal list-inside text-gray-400 space-y-1">
+                                <li>Bookmark the current page.</li>
+                                <li>Click the Bookmark button above to copy the special code.</li>
+                                <li>Edit your new bookmark settings.</li>
+                                <li>Replace its URL with the copied code and save.</li>
+                            </ol>
+                        </div>
+                    </div>
+
+                    <div>
+                        <span class="text-yellow-300 font-bold block mb-1">3. Explore the web together</span>
+                        <p class="text-gray-400">Visit any website and click your crawler bookmark. Your crawler will appear from offscreen and start interacting with the page!</p>
+                    </div>
+
+                    <div class="p-3 bg-yellow-300/10 border border-yellow-300/30 rounded-xl text-yellow-200/90 text-[11px]">
+                        <strong>Note:</strong> This is an experimental experience. Loading may take a few moments, and some websites aren't fully compatible yet. Wikipedia is a great place to start!
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Notification Toast -->
+    <div id="toast" class="fixed bottom-6 right-6 z-50 backdrop-blur-md bg-darkpanel border border-yellow-300 text-yellow-300 px-5 py-3 rounded-2xl text-xs font-mono shadow-2xl transform translate-y-24 opacity-0 transition-all duration-300 flex items-center space-x-2">
+        <i class="fa-solid fa-check"></i>
+        <span id="toast-msg">Bookmarklet code copied!</span>
+    </div>
+
+    <!-- Exact Kinetic Crawler Engine Script -->
+    <script>
+        const canvas = document.getElementById('crawler-canvas');
+        const ctx = canvas.getContext('2d');
+
+        let width = 0;
+        let height = 0;
+        function resize() {
+            width = canvas.width = window.innerWidth;
+            height = canvas.height = window.innerHeight;
+        }
+        window.addEventListener('resize', resize);
+        resize();
+        canvas.classList.remove('cursor-crosshair');
+        canvas.style.cursor = 'default';
+
+        const CRAWLER_COLOR = '#dfff00';
+        const GRID_SIZE = 50;
+        const STANCE_RATIO = 0.62;
+        const SWING_RATIO = 1 - STANCE_RATIO;
+        const clamp = (value, min, max) => Math.max(min, Math.min(max, value));
+        const lerp = (a, b, t) => a + (b - a) * t;
+        const smoothstep = (t) => t * t * (3 - 2 * t);
+        const smootherstep = (t) => t * t * t * (t * (t * 6 - 15) + 10);
+
+        let ripples = [];
+        function addRipple(x, y, force = 1) {
+            ripples.push({ x, y, radius: 1, alpha: 0.42 * force, speed: 48 + 14 * force, life: 0.72 });
+            if (ripples.length > 32) ripples.shift();
+        }
+
+        // The grid subtly bends around the crawler instead of remaining completely static.
+        function drawReactiveGrid(crawler, dt, now) {
+            const influenceRadius = 190;
+            const deform = (x, y) => {
+                const dx = x - crawler.x;
+                const dy = y - crawler.y;
+                const distance = Math.hypot(dx, dy);
+                if (distance < 0.001 || distance > influenceRadius * 2.2) return { x, y };
+                const influence = Math.exp(-(distance * distance) / (2 * influenceRadius * influenceRadius));
+                const wave = Math.sin(distance * 0.055 - now * 3.1) * 6.5 * influence;
+                return { x: x + (dx / distance) * wave, y: y + (dy / distance) * wave };
+            };
+
+            ctx.save();
+            ctx.strokeStyle = 'rgba(255,255,255,0.035)';
+            ctx.lineWidth = 1;
+            const sample = 18;
+
+            for (let x = 0; x <= width; x += GRID_SIZE) {
+                ctx.beginPath();
+                for (let y = 0; y <= height; y += sample) {
+                    const point = deform(x, y);
+                    if (y === 0) ctx.moveTo(point.x, point.y);
+                    else ctx.lineTo(point.x, point.y);
+                }
+                ctx.stroke();
+            }
+            for (let y = 0; y <= height; y += GRID_SIZE) {
+                ctx.beginPath();
+                for (let x = 0; x <= width; x += sample) {
+                    const point = deform(x, y);
+                    if (x === 0) ctx.moveTo(point.x, point.y);
+                    else ctx.lineTo(point.x, point.y);
+                }
+                ctx.stroke();
+            }
+
+            for (let i = ripples.length - 1; i >= 0; i--) {
+                const ripple = ripples[i];
+                ripple.radius += ripple.speed * dt;
+                ripple.life -= dt;
+                if (ripple.life <= 0) {
+                    ripples.splice(i, 1);
+                    continue;
+                }
+                const alpha = ripple.alpha * (ripple.life / 0.72);
+                ctx.strokeStyle = `rgba(223,255,0,${alpha})`;
+                ctx.lineWidth = 1.15;
+                ctx.beginPath();
+                ctx.arc(ripple.x, ripple.y, ripple.radius, 0, Math.PI * 2);
+                ctx.stroke();
+            }
+            ctx.restore();
+        }
+
+        // Optional sound: the movement engine still works if Tone.js is unavailable.
+        let audioEnabled = true;
+        let isPaused = false;
+        let synth = null;
+        if (typeof Tone !== 'undefined') {
+            try {
+                synth = new Tone.PolySynth(Tone.Synth, {
+                    oscillator: { type: 'sine' },
+                    envelope: { attack: 0.005, decay: 0.08, sustain: 0, release: 0.06 }
+                }).toDestination();
+                synth.volume.value = -22;
+            } catch (error) {
+                synth = null;
+            }
+        }
+        const pentatonicScale = ['C4', 'D4', 'E4', 'G4', 'A4', 'C5', 'D5', 'E5'];
+        function playStepSound() {
+            if (!audioEnabled || isPaused || !synth || typeof Tone === 'undefined') return;
+            try {
+                if (Tone.context.state !== 'running') Tone.start();
+                const note = pentatonicScale[Math.floor(Math.random() * pentatonicScale.length)];
+                synth.triggerAttackRelease(note, '32n');
+            } catch (error) { /* Audio is optional; locomotion must never depend on it. */ }
+        }
+
+        function toggleAudio() {
+            audioEnabled = !audioEnabled;
+            document.getElementById('audio-label').textContent = audioEnabled ? 'Sonic Synth: ON' : 'Sonic Synth: OFF';
+            document.getElementById('audio-icon').className = audioEnabled ? 'fa-solid fa-volume-high' : 'fa-solid fa-volume-xmark';
+        }
+        function togglePause() {
+            isPaused = !isPaused;
+            document.getElementById('pause-label').textContent = isPaused ? 'Play' : 'Pause';
+            document.getElementById('pause-icon').className = isPaused ? 'fa-solid fa-play' : 'fa-solid fa-pause';
+        }
+        function toggleLegPanel() {
+            document.getElementById('leg-panel').classList.toggle('hidden');
+        }
+
+        // Track the real system pointer only while it is inside the viewport/canvas.
+        // No artificial circle is drawn at the cursor position.
+        const mouse = {
+            x: window.innerWidth * 0.5,
+            y: window.innerHeight * 0.5,
+            inside: false,
+            idleTime: 99,
+            lastX: null,
+            lastY: null
+        };
+        window.addEventListener('pointermove', (event) => {
+            const rect = canvas.getBoundingClientRect();
+            const inside = event.clientX >= rect.left && event.clientX <= rect.right &&
+                           event.clientY >= rect.top && event.clientY <= rect.bottom;
+            mouse.inside = inside;
+            if (!inside) return;
+            const moved = mouse.lastX === null || Math.hypot(event.clientX - mouse.lastX, event.clientY - mouse.lastY) > 1.5;
+            mouse.x = event.clientX;
+            mouse.y = event.clientY;
+            if (moved) mouse.idleTime = 0;
+            mouse.lastX = event.clientX;
+            mouse.lastY = event.clientY;
+        });
+        window.addEventListener('pointerleave', () => { mouse.inside = false; mouse.idleTime = 99; });
+        document.addEventListener('mouseleave', () => { mouse.inside = false; mouse.idleTime = 99; });
+        window.addEventListener('mouseout', (event) => {
+            if (!event.relatedTarget && (event.clientX <= 0 || event.clientY <= 0 || event.clientX >= window.innerWidth || event.clientY >= window.innerHeight)) {
+                mouse.inside = false;
+                mouse.idleTime = 99;
+            }
+        });
+        window.addEventListener('blur', () => { mouse.inside = false; mouse.idleTime = 99; });
+        window.addEventListener('pointerdown', (event) => {
+            const rect = canvas.getBoundingClientRect();
+            if (event.clientX < rect.left || event.clientX > rect.right || event.clientY < rect.top || event.clientY > rect.bottom) return;
+            mouse.x = event.clientX;
+            mouse.y = event.clientY;
+            mouse.inside = true;
+            mouse.idleTime = 0;
+            addRipple(mouse.x, mouse.y, 1.15);
+            if (synth && typeof Tone !== 'undefined' && Tone.context.state !== 'running') {
+                try { Tone.start(); } catch (error) { /* Ignore optional audio activation errors. */ }
+            }
+        });
+
+        class BiologicalSpiderCrawler {
+            constructor(x, y) {
+                this.x = x;
+                this.y = y;
+                this.angle = 0;
+                this.speed = 0;
+                this.stopThreshold = 70;
+                this.gaitPhase = 0.02;
+                this.idlePushCycle = 0;
+                this.probeClock = 0;
+                this.isRunning = false;
+                this.isInvestigating = false;
+                this.wanderTarget = { x, y };
+                this.wanderCountdown = 0;
+                this.wasFollowingPointer = false;
+                this.bodyBob = 0;
+
+                // Seven articulated segments. The leg length is retained while the body is reduced.
+                this.segmentLengths = {
+                    coxa: 8,
+                    trochanter: 5,
+                    femur: 34,
+                    patella: 14,
+                    tibia: 29,
+                    metatarsus: 25,
+                    tarsus: 13
+                };
+
+                this.legs = [];
+                this.initAnatomicalLegs();
+                this.chooseWanderTarget();
+            }
+
+            totalLegLength() {
+                const s = this.segmentLengths;
+                return s.coxa + s.trochanter + s.femur + s.patella + s.tibia + s.metatarsus + s.tarsus;
+            }
+
+            getHip(leg) {
+                const cos = Math.cos(this.angle);
+                const sin = Math.sin(this.angle);
+                return {
+                    x: this.x + leg.attachOffset.x * cos - leg.attachOffset.y * sin,
+                    y: this.y + leg.attachOffset.x * sin + leg.attachOffset.y * cos
+                };
+            }
+
+            initAnatomicalLegs() {
+                const legConfigs = [
+                    { id: 'L1', label: 'L1 (Front)', side: -1, pair: 0, attachOffset: { x: 9, y: -4.5 }, baseAngle: -0.75, group: 'A', isFront: true, phaseNudge: 0.000 },
+                    { id: 'R1', label: 'R1 (Front)', side: 1, pair: 0, attachOffset: { x: 9, y: 4.5 }, baseAngle: 0.75, group: 'B', isFront: true, phaseNudge: 0.012 },
+                    { id: 'L2', label: 'L2 (Mid-F)', side: -1, pair: 1, attachOffset: { x: 3, y: -6 }, baseAngle: -1.30, group: 'B', isFront: false, phaseNudge: 0.020 },
+                    { id: 'R2', label: 'R2 (Mid-F)', side: 1, pair: 1, attachOffset: { x: 3, y: 6 }, baseAngle: 1.30, group: 'A', isFront: false, phaseNudge: 0.032 },
+                    { id: 'L3', label: 'L3 (Mid-R)', side: -1, pair: 2, attachOffset: { x: -3, y: -6 }, baseAngle: -1.85, group: 'A', isFront: false, phaseNudge: 0.045 },
+                    { id: 'R3', label: 'R3 (Mid-R)', side: 1, pair: 2, attachOffset: { x: -3, y: 6 }, baseAngle: 1.85, group: 'B', isFront: false, phaseNudge: 0.055 },
+                    { id: 'L4', label: 'L4 (Hind)', side: -1, pair: 3, attachOffset: { x: -9, y: -4.5 }, baseAngle: -2.40, group: 'B', isFront: false, phaseNudge: 0.068 },
+                    { id: 'R4', label: 'R4 (Hind)', side: 1, pair: 3, attachOffset: { x: -9, y: 4.5 }, baseAngle: 2.40, group: 'A', isFront: false, phaseNudge: 0.080 }
+                ];
+
+                this.legs = legConfigs.map((cfg) => {
+                    const hip = this.getHip(cfg);
+                    const reach = cfg.isFront ? 88 : 82;
+                    const radialAngle = this.angle + cfg.baseAngle;
+                    const forwardX = Math.cos(this.angle);
+                    const forwardY = Math.sin(this.angle);
+                    const initialStride = 96;
+                    // Start each foot slightly behind its neutral landing point so the first step is visible.
+                    const initialX = hip.x + Math.cos(radialAngle) * reach - forwardX * initialStride * 0.40;
+                    const initialY = hip.y + Math.sin(radialAngle) * reach - forwardY * initialStride * 0.40;
+                    const phaseOffset = (cfg.group === 'A' ? 0 : 0.5) + cfg.phaseNudge;
+                    return {
+                        ...cfg,
+                        active: true,
+                        phaseOffset,
+                        plantedFoot: { x: initialX, y: initialY },
+                        currentFoot: { x: initialX, y: initialY },
+                        swingStartFoot: { x: initialX, y: initialY },
+                        targetFoot: { x: initialX, y: initialY },
+                        inSwing: false,
+                        isStance: true,
+                        phaseState: 'SUPPORT',
+                        swingProgress: 0,
+                        footLift: 0,
+                        hydraulicExtension: 1,
+                        flexionAngle: 0.2,
+                        stepCount: 0,
+                        chain: null,
+                        probeOffset: 0
+                    };
+                });
+                this.renderLegControls();
+            }
+
+            renderLegControls() {
+                const container = document.getElementById('leg-buttons');
+                if (!container) return;
+                container.innerHTML = '';
+                this.legs.forEach((leg) => {
+                    const button = document.createElement('button');
+                    button.className = `px-2 py-1 rounded-md text-[11px] font-bold border ${leg.active ? 'bg-yellow-300/20 border-yellow-300 text-yellow-300' : 'bg-red-950/40 border-red-800 text-red-400 opacity-60'}`;
+                    button.textContent = leg.id;
+                    button.title = `${leg.label}: Click to ${leg.active ? 'autotomize' : 'restore'}`;
+                    button.setAttribute('aria-pressed', String(leg.active));
+                    button.onclick = () => {
+                        leg.active = !leg.active;
+                        if (leg.active) {
+                            const hip = this.getHip(leg);
+                            const direction = this.angle + leg.baseAngle;
+                            const x = hip.x + Math.cos(direction) * (leg.isFront ? 88 : 82);
+                            const y = hip.y + Math.sin(direction) * (leg.isFront ? 88 : 82);
+                            leg.plantedFoot = { x, y };
+                            leg.currentFoot = { x, y };
+                            leg.swingStartFoot = { x, y };
+                            leg.targetFoot = { x, y };
+                            leg.inSwing = false;
+                            leg.phaseState = 'SUPPORT';
+                            leg.chain = null;
+                        }
+                        this.renderLegControls();
+                    };
+                    container.appendChild(button);
+                });
+            }
+
+            chooseWanderTarget() {
+                const margin = Math.min(150, Math.max(85, Math.min(width, height) * 0.16));
+                const minX = Math.min(margin, width * 0.35);
+                const minY = Math.min(margin, height * 0.35);
+                this.wanderTarget = {
+                    x: minX + Math.random() * Math.max(1, width - minX * 2),
+                    y: minY + Math.random() * Math.max(1, height - minY * 2)
+                };
+                this.wanderCountdown = 4 + Math.random() * 3;
+            }
+
+            computeStepTarget(leg, hip, strideDistance) {
+                const radialAngle = this.angle + leg.baseAngle;
+                const forwardX = Math.cos(this.angle);
+                const forwardY = Math.sin(this.angle);
+                const reach = leg.isFront ? 88 : (leg.pair === 3 ? 79 : 83);
+                const leadRatio = leg.isFront ? 0.43 : (leg.pair === 3 ? 0.31 : 0.37);
+                let x = hip.x + Math.cos(radialAngle) * reach + forwardX * strideDistance * leadRatio;
+                let y = hip.y + Math.sin(radialAngle) * reach + forwardY * strideDistance * leadRatio;
+
+                // Guarantee a meaningful displacement from the previous landing point.
+                const deltaX = x - leg.currentFoot.x;
+                const deltaY = y - leg.currentFoot.y;
+                const forwardDisplacement = deltaX * forwardX + deltaY * forwardY;
+                const minimumStride = strideDistance * (leg.isFront ? 0.72 : 0.62);
+                if (forwardDisplacement < minimumStride) {
+                    const extra = minimumStride - forwardDisplacement;
+                    x += forwardX * extra;
+                    y += forwardY * extra;
+                }
+
+                const margin = 18;
+                return {
+                    x: clamp(x, margin, Math.max(margin, width - margin)),
+                    y: clamp(y, margin, Math.max(margin, height - margin))
+                };
+            }
+
+            beginSwing(leg, hip, strideDistance) {
+                leg.inSwing = true;
+                leg.isStance = false;
+                leg.phaseState = 'LIFT';
+                leg.swingProgress = 0;
+                leg.swingStartFoot = { x: leg.currentFoot.x, y: leg.currentFoot.y };
+                leg.targetFoot = this.computeStepTarget(leg, hip, strideDistance);
+                leg.footLift = 0;
+                leg.hydraulicExtension = 1;
+            }
+
+            updateLeg(leg, dt, moving, strideDistance) {
+                if (!leg.active) return;
+                const hip = this.getHip(leg);
+                const phase = (this.gaitPhase + leg.phaseOffset) % 1;
+                const swingNow = phase >= STANCE_RATIO;
+
+                if (moving && swingNow && !leg.inSwing) {
+                    this.beginSwing(leg, hip, strideDistance);
+                }
+
+                if (leg.inSwing) {
+                    if (!swingNow && moving) {
+                        // The phase wrapped: land exactly on the stored target, never snap mid-stance.
+                        leg.currentFoot.x = leg.targetFoot.x;
+                        leg.currentFoot.y = leg.targetFoot.y;
+                        leg.plantedFoot = { x: leg.targetFoot.x, y: leg.targetFoot.y };
+                        leg.inSwing = false;
+                        leg.isStance = true;
+                        leg.phaseState = 'SUPPORT';
+                        leg.swingProgress = 0;
+                        leg.footLift = 0;
+                        leg.hydraulicExtension = 1;
+                        leg.stepCount += 1;
+                        addRipple(leg.currentFoot.x, leg.currentFoot.y, leg.isFront ? 0.55 : 0.38);
+                        playStepSound();
+                    } else {
+                        // If the body stops mid-step, finish the existing swing smoothly before settling.
+                        const progress = moving
+                            ? clamp((phase - STANCE_RATIO) / SWING_RATIO, 0, 1)
+                            : clamp(leg.swingProgress + dt * 1.7, 0, 1);
+                        leg.swingProgress = progress;
+                        const t = smootherstep(progress);
+                        const start = leg.swingStartFoot;
+                        const end = leg.targetFoot;
+                        const dx = end.x - start.x;
+                        const dy = end.y - start.y;
+                        const length = Math.max(1, Math.hypot(dx, dy));
+                        const perpX = -dy / length;
+                        const perpY = dx / length;
+                        const arc = (leg.isFront ? 13 : 9) * (leg.side === -1 ? 1 : -1);
+                        const controlX = (start.x + end.x) * 0.5 + perpX * arc;
+                        const controlY = (start.y + end.y) * 0.5 + perpY * arc;
+                        const oneMinus = 1 - t;
+                        leg.currentFoot.x = oneMinus * oneMinus * start.x + 2 * oneMinus * t * controlX + t * t * end.x;
+                        leg.currentFoot.y = oneMinus * oneMinus * start.y + 2 * oneMinus * t * controlY + t * t * end.y;
+                        leg.footLift = Math.sin(Math.PI * progress) * (leg.isFront ? 11 : 8);
+                        leg.hydraulicExtension = 1 + Math.sin(Math.PI * progress) * 0.055;
+                        leg.phaseState = progress < 0.18 ? 'LIFT' : (progress < 0.70 ? 'EXTEND' : (progress < 0.91 ? 'LOWER' : 'TOUCH'));
+                        leg.flexionAngle = lerp(0.48, 0.12, progress);
+
+                        if (!moving && progress >= 1) {
+                            leg.currentFoot = { x: leg.targetFoot.x, y: leg.targetFoot.y };
+                            leg.plantedFoot = { x: leg.targetFoot.x, y: leg.targetFoot.y };
+                            leg.inSwing = false;
+                            leg.isStance = true;
+                            leg.phaseState = 'SUPPORT';
+                            leg.swingProgress = 0;
+                            leg.footLift = 0;
+                            leg.hydraulicExtension = 1;
+                            leg.stepCount += 1;
+                            addRipple(leg.currentFoot.x, leg.currentFoot.y, leg.isFront ? 0.48 : 0.32);
+                            playStepSound();
+                        }
+                    }
+                } else {
+                    // Stance foot remains anchored in world space while the body passes over it.
+                    leg.currentFoot.x = leg.plantedFoot.x;
+                    leg.currentFoot.y = leg.plantedFoot.y;
+                    leg.isStance = true;
+                    leg.phaseState = leg.isFront ? 'PULL' : 'SUPPORT';
+                    leg.footLift = 0;
+                    leg.hydraulicExtension = 1;
+                    const pullDistance = Math.hypot(hip.x - leg.plantedFoot.x, hip.y - leg.plantedFoot.y);
+                    leg.flexionAngle = clamp(0.18 + pullDistance / 300, 0.18, 0.55);
+                }
+
+                // When prey is stationary and close, the front legs make small alternating probing reaches.
+                const canProbe = this.isInvestigating && leg.isFront && !leg.inSwing;
+                const targetVectorX = mouse.x - hip.x;
+                const targetVectorY = mouse.y - hip.y;
+                const targetLength = Math.max(1, Math.hypot(targetVectorX, targetVectorY));
+                const probeWave = 0.5 + 0.5 * Math.sin(this.probeClock * 2.5 + (leg.side < 0 ? 0 : Math.PI));
+                const desiredProbe = canProbe ? probeWave * 12 : 0;
+                leg.probeOffset += (desiredProbe - leg.probeOffset) * (1 - Math.exp(-dt * 5));
+                leg.probeDirection = { x: targetVectorX / targetLength, y: targetVectorY / targetLength };
+            }
+
+            update(dt) {
+                if (isPaused) return;
+                mouse.idleTime += dt;
+                this.probeClock += dt;
+
+                const hasPreyTarget = mouse.inside;
+                if (hasPreyTarget) {
+                    this.wasFollowingPointer = true;
+                } else if (this.wasFollowingPointer) {
+                    // Choose a fresh autonomous destination immediately when the pointer exits.
+                    this.chooseWanderTarget();
+                    this.wasFollowingPointer = false;
+                }
+                let target;
+                if (hasPreyTarget) {
+                    target = { x: mouse.x, y: mouse.y };
+                } else {
+                    this.wanderCountdown -= dt;
+                    const wanderDistance = Math.hypot(this.wanderTarget.x - this.x, this.wanderTarget.y - this.y);
+                    if (this.wanderCountdown <= 0 || wanderDistance < 65) this.chooseWanderTarget();
+                    target = this.wanderTarget;
+                }
+
+                const dx = target.x - this.x;
+                const dy = target.y - this.y;
+                const distance = Math.hypot(dx, dy);
+                const targetAngle = Math.atan2(dy, dx);
+                let angleDifference = targetAngle - this.angle;
+                while (angleDifference < -Math.PI) angleDifference += Math.PI * 2;
+                while (angleDifference > Math.PI) angleDifference -= Math.PI * 2;
+                if (distance > 8) this.angle += angleDifference * (1 - Math.exp(-dt * 4.4));
+
+                this.isRunning = distance > 285;
+                const maxSpeed = this.isRunning ? 205 : 142; // pixels per second, frame-rate independent
+                const desiredSpeed = distance > this.stopThreshold
+                    ? Math.min(maxSpeed, (distance - this.stopThreshold) * 1.55)
+                    : 0;
+                const acceleration = desiredSpeed > this.speed ? 5.2 : 7.0;
+                this.speed += (desiredSpeed - this.speed) * (1 - Math.exp(-dt * acceleration));
+                if (this.speed < 1.8) this.speed = 0;
+
+                this.isInvestigating = hasPreyTarget && mouse.idleTime > 0.45 && distance < 155 && this.speed < 65;
+                const moving = this.speed > 4;
+                const strideDistance = this.isRunning ? 124 : 98;
+
+                if (moving) {
+                    this.x += Math.cos(this.angle) * this.speed * dt;
+                    this.y += Math.sin(this.angle) * this.speed * dt;
+                }
+
+                // Keep the crawler and its full stride inside the visible canvas.
+                const edgeMargin = Math.min(145, Math.max(82, Math.min(width, height) * 0.15));
+                const minX = Math.min(edgeMargin, width * 0.42);
+                const minY = Math.min(edgeMargin, height * 0.42);
+                this.x = clamp(this.x, minX, Math.max(minX, width - minX));
+                this.y = clamp(this.y, minY, Math.max(minY, height - minY));
+
+                const hasSwingingLeg = this.legs.some((leg) => leg.active && leg.inSwing);
+                if (moving) {
+                    const frequency = clamp(this.speed / strideDistance, 0.38, 1.85);
+                    this.gaitPhase = (this.gaitPhase + dt * frequency) % 1;
+                } else if (hasSwingingLeg) {
+                    // Finish airborne steps and settle all feet before the gait clock pauses.
+                    this.gaitPhase = (this.gaitPhase + dt * 0.82) % 1;
+                }
+
+                const cycleAmplitude = clamp(this.speed / 180, 0, 1);
+                this.bodyBob = Math.sin(this.gaitPhase * Math.PI * 4) * cycleAmplitude * 1.15;
+                this.idlePushCycle += dt * (this.isInvestigating ? 1.7 : 0.35);
+
+                this.legs.forEach((leg) => this.updateLeg(leg, dt, moving, strideDistance));
+
+                const statusDot = document.getElementById('status-dot');
+                const statusText = document.getElementById('status-text');
+                if (statusDot && statusText) {
+                    if (this.isInvestigating) {
+                        statusDot.className = 'w-2.5 h-2.5 rounded-full bg-yellow-300 shadow-[0_0_10px_#dfff00] animate-pulse';
+                        statusText.textContent = 'Investigating / Front-Leg Probing';
+                    } else if (moving) {
+                        statusDot.className = 'w-2.5 h-2.5 rounded-full bg-yellow-300 shadow-[0_0_10px_#dfff00] animate-pulse';
+                        statusText.textContent = this.isRunning ? 'Fast Running / Long Strides' : 'Walking / Clear Eight-Leg Steps';
+                    } else {
+                        statusDot.className = 'w-2.5 h-2.5 rounded-full bg-yellow-400/80 animate-ping';
+                        statusText.textContent = hasPreyTarget ? 'Resting / Sensing Prey' : 'Autonomous Wandering';
+                    }
+                }
+            }
+
+            solveLegChain(leg, hip, foot) {
+                const scale = leg.hydraulicExtension || 1;
+                const lengths = [
+                    this.segmentLengths.coxa,
+                    this.segmentLengths.trochanter,
+                    this.segmentLengths.femur * scale,
+                    this.segmentLengths.patella,
+                    this.segmentLengths.tibia,
+                    this.segmentLengths.metatarsus,
+                    this.segmentLengths.tarsus
+                ];
+                const totalLength = lengths.reduce((sum, length) => sum + length, 0);
+                let dx = foot.x - hip.x;
+                let dy = foot.y - hip.y;
+                let distance = Math.hypot(dx, dy);
+                if (distance < 0.001) { dx = 1; dy = 0; distance = 1; }
+                const ux = dx / distance;
+                const uy = dy / distance;
+                const reachableDistance = Math.min(distance, totalLength - 0.5);
+                const target = { x: hip.x + ux * reachableDistance, y: hip.y + uy * reachableDistance };
+
+                if (!leg.chain) {
+                    leg.chain = [{ x: hip.x, y: hip.y }];
+                    const perpX = -uy * (leg.side < 0 ? 1 : -1);
+                    const perpY = ux * (leg.side < 0 ? 1 : -1);
+                    let accumulated = 0;
+                    for (let i = 0; i < lengths.length; i++) {
+                        accumulated += lengths[i];
+                        const t = accumulated / totalLength;
+                        const bend = Math.sin(Math.PI * t) * (leg.isFront ? 17 : 13);
+                        leg.chain.push({
+                            x: hip.x + ux * accumulated + perpX * bend,
+                            y: hip.y + uy * accumulated + perpY * bend
+                        });
+                    }
+                }
+
+                const points = leg.chain;
+                points[0].x = hip.x;
+                points[0].y = hip.y;
+                points[points.length - 1].x = target.x;
+                points[points.length - 1].y = target.y;
+
+                // FABRIK inverse kinematics. Multiple short passes keep segment lengths stable and prevent snapping.
+                if (distance >= totalLength - 0.5) {
+                    for (let i = 0; i < lengths.length; i++) {
+                        points[i + 1].x = points[i].x + ux * lengths[i];
+                        points[i + 1].y = points[i].y + uy * lengths[i];
+                    }
+                } else {
+                    const poleSign = leg.side < 0 ? 1 : -1;
+                    const poleX = -uy * poleSign;
+                    const poleY = ux * poleSign;
+                    for (let iteration = 0; iteration < 7; iteration++) {
+                        points[points.length - 1].x = target.x;
+                        points[points.length - 1].y = target.y;
+                        for (let i = points.length - 2; i >= 0; i--) {
+                            const vx = points[i].x - points[i + 1].x;
+                            const vy = points[i].y - points[i + 1].y;
+                            const length = Math.max(0.001, Math.hypot(vx, vy));
+                            points[i].x = points[i + 1].x + (vx / length) * lengths[i];
+                            points[i].y = points[i + 1].y + (vy / length) * lengths[i];
+                        }
+                        points[0].x = hip.x;
+                        points[0].y = hip.y;
+                        for (let i = 0; i < lengths.length; i++) {
+                            const vx = points[i + 1].x - points[i].x;
+                            const vy = points[i + 1].y - points[i].y;
+                            const length = Math.max(0.001, Math.hypot(vx, vy));
+                            points[i + 1].x = points[i].x + (vx / length) * lengths[i];
+                            points[i + 1].y = points[i].y + (vy / length) * lengths[i];
+                        }
+
+                        // Keep the knee chain bent consistently to one side to avoid joint flipping.
+                        const axisX = ux;
+                        const axisY = uy;
+                        for (let i = 1; i < points.length - 1; i++) {
+                            const relX = points[i].x - hip.x;
+                            const relY = points[i].y - hip.y;
+                            const projection = relX * axisX + relY * axisY;
+                            const baseX = hip.x + axisX * projection;
+                            const baseY = hip.y + axisY * projection;
+                            const offset = (points[i].x - baseX) * poleX + (points[i].y - baseY) * poleY;
+                            const minimumBend = 3.5 + Math.sin((i / (points.length - 1)) * Math.PI) * (leg.isFront ? 5.5 : 4.2);
+                            const stableOffset = Math.max(minimumBend, Math.abs(offset));
+                            points[i].x = baseX + poleX * stableOffset;
+                            points[i].y = baseY + poleY * stableOffset;
+                        }
+                    }
+                }
+                // Pin both ends exactly after solving so the foot is never visually detached.
+                points[0].x = hip.x;
+                points[0].y = hip.y;
+                points[points.length - 1].x = target.x;
+                points[points.length - 1].y = target.y;
+                return points;
+            }
+
+            drawStepGuide(leg) {
+                if (!leg.inSwing) return;
+                const start = leg.swingStartFoot;
+                const end = leg.targetFoot;
+                const dx = end.x - start.x;
+                const dy = end.y - start.y;
+                const length = Math.max(1, Math.hypot(dx, dy));
+                const side = leg.side < 0 ? 1 : -1;
+                const controlX = (start.x + end.x) * 0.5 + (-dy / length) * (leg.isFront ? 13 : 9) * side;
+                const controlY = (start.y + end.y) * 0.5 + (dx / length) * (leg.isFront ? 13 : 9) * side;
+                ctx.save();
+                ctx.setLineDash([3, 5]);
+                ctx.strokeStyle = leg.isFront ? 'rgba(223,255,0,0.22)' : 'rgba(223,255,0,0.13)';
+                ctx.lineWidth = 1;
+                ctx.beginPath();
+                ctx.moveTo(start.x, start.y);
+                ctx.quadraticCurveTo(controlX, controlY, end.x, end.y);
+                ctx.stroke();
+                ctx.setLineDash([]);
+                ctx.restore();
+            }
+
+            draw() {
+                const cos = Math.cos(this.angle);
+                const sin = Math.sin(this.angle);
+
+                // Draw swing paths first so the actual legs remain visually clear above them.
+                this.legs.forEach((leg) => {
+                    if (leg.active) this.drawStepGuide(leg);
+                });
+
+                // Eight independent seven-segment articulated legs.
+                this.legs.forEach((leg) => {
+                    if (!leg.active) return;
+                    const hip = this.getHip(leg);
+                    const displayFoot = {
+                        x: leg.currentFoot.x + (leg.probeDirection ? leg.probeDirection.x * leg.probeOffset : 0),
+                        y: leg.currentFoot.y + (leg.probeDirection ? leg.probeDirection.y * leg.probeOffset : 0)
+                    };
+                    const points = this.solveLegChain(leg, hip, displayFoot);
+
+                    ctx.save();
+                    ctx.strokeStyle = leg.inSwing ? 'rgba(223,255,0,0.96)' : CRAWLER_COLOR;
+                    ctx.lineWidth = leg.isFront ? (leg.inSwing ? 1.35 : 1.18) : (leg.inSwing ? 1.08 : 0.92);
+                    ctx.lineCap = 'round';
+                    ctx.lineJoin = 'round';
+                    ctx.beginPath();
+                    ctx.moveTo(points[0].x, points[0].y);
+                    for (let i = 1; i < points.length; i++) ctx.lineTo(points[i].x, points[i].y);
+                    ctx.stroke();
+
+                    // Small joint nodes keep the seven anatomical segments readable without making the legs thick.
+                    for (let i = 0; i < points.length; i++) {
+                        const radius = (i === 3 || i === 4) ? 1.8 : (i === 0 || i === 6 ? 1.35 : 1.15);
+                        ctx.fillStyle = CRAWLER_COLOR;
+                        ctx.beginPath();
+                        ctx.arc(points[i].x, points[i].y, radius, 0, Math.PI * 2);
+                        ctx.fill();
+                    }
+
+                    // Distinct foot marker: larger while airborne, then a crisp contact point on landing.
+                    const footRadius = 2.0 + leg.footLift * 0.055;
+                    ctx.strokeStyle = leg.inSwing ? 'rgba(223,255,0,0.72)' : 'rgba(223,255,0,0.38)';
+                    ctx.lineWidth = 0.85;
+                    ctx.beginPath();
+                    ctx.arc(displayFoot.x, displayFoot.y, footRadius + 1.4, 0, Math.PI * 2);
+                    ctx.stroke();
+                    ctx.restore();
+                });
+
+                // Compact body (25% smaller than the previous drawing), with long, slender legs retained.
+                ctx.save();
+                ctx.translate(this.x, this.y + this.bodyBob);
+                ctx.rotate(this.angle);
+                ctx.strokeStyle = CRAWLER_COLOR;
+                ctx.lineWidth = 1.2;
+                ctx.fillStyle = '#08080a';
+
+                // Pedipalps
+                ctx.beginPath();
+                ctx.moveTo(9, -2.5); ctx.lineTo(16, -5.2); ctx.lineTo(19, -4);
+                ctx.moveTo(9, 2.5); ctx.lineTo(16, 5.2); ctx.lineTo(19, 4);
+                ctx.stroke();
+                this.drawNodeDot(19, -4, 1.5);
+                this.drawNodeDot(19, 4, 1.5);
+
+                // Eyes
+                this.drawNodeDot(9, -2.0, 1.15);
+                this.drawNodeDot(9, 2.0, 1.15);
+                this.drawNodeDot(10.8, -0.9, 0.95);
+                this.drawNodeDot(10.8, 0.9, 0.95);
+
+                // Cephalothorax: 25% reduction.
+                ctx.beginPath();
+                ctx.ellipse(1.5, 0, 8.25, 5.6, 0, 0, Math.PI * 2);
+                ctx.fill();
+                ctx.stroke();
+
+                // Abdomen: 25% reduction.
+                ctx.beginPath();
+                ctx.ellipse(-15, 0, 12, 7.1, 0, 0, Math.PI * 2);
+                ctx.fill();
+                ctx.stroke();
+                ctx.restore();
+            }
+
+            drawNodeDot(x, y, radius) {
+                ctx.fillStyle = CRAWLER_COLOR;
+                ctx.beginPath();
+                ctx.arc(x, y, radius, 0, Math.PI * 2);
+                ctx.fill();
+            }
+        }
+
+        const crawler = new BiologicalSpiderCrawler(window.innerWidth / 2, window.innerHeight / 2);
+        let previousFrameTime = 0;
+        function animate(timestamp) {
+            const now = timestamp * 0.001;
+            const dt = previousFrameTime ? clamp(now - previousFrameTime, 0.001, 0.033) : 1 / 60;
+            previousFrameTime = now;
+            crawler.update(dt);
+            ctx.clearRect(0, 0, width, height);
+            drawReactiveGrid(crawler, dt, now);
+            crawler.draw();
+            requestAnimationFrame(animate);
+        }
+        requestAnimationFrame(animate);
+
+        function toggleInfoModal() {
+            document.getElementById('info-modal').classList.toggle('hidden');
+        }
+        function copyBookmarkletCode() {
+            const code = `javascript:(function(){const s=document.createElement('script');s.src='https://cdn.jsdelivr.net/gh/slavarybin/crawler-inject/crawler.js';document.body.appendChild(s);})();`;
+            const el = document.createElement('textarea');
+            el.value = code;
+            document.body.appendChild(el);
+            el.select();
+            document.execCommand('copy');
+            document.body.removeChild(el);
+            showToast('Bookmarklet code copied to clipboard!');
+        }
+        function showToast(msg) {
+            const toast = document.getElementById('toast');
+            document.getElementById('toast-msg').textContent = msg;
+            toast.classList.remove('translate-y-24', 'opacity-0');
+            setTimeout(() => toast.classList.add('translate-y-24', 'opacity-0'), 3000);
+        }
+    </script>
+</body>
+</html>
